@@ -3,6 +3,12 @@
     "poll_seconds": 2,
     "log_actions": true
   },
+  "display_controls": {
+    "brightness": {
+      "display": "",
+      "minimum_percent": 1
+    }
+  },
   "visuals": {
     "theme": "category",
     "brightness": 100,
@@ -33,6 +39,7 @@
   "mappings": [
     {"device": "f1", "control": "knob_1", "kind": "absolute", "action": "volume_absolute"},
     {"device": "f1", "control": "knob_3", "kind": "absolute", "action": "controller_brightness_absolute"},
+    {"device": "f1", "control": "knob_4", "kind": "absolute", "action": "brightness_absolute"},
     {"device": "f1", "control": "play_1", "kind": "press", "action": "media_play_pause"},
     {"device": "f1", "control": "play_2", "kind": "press", "action": "media_previous"},
     {"device": "f1", "control": "play_3", "kind": "press", "action": "media_next"},
