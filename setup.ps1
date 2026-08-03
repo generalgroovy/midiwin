@@ -11,16 +11,32 @@ $Python = Join-Path $Venv "Scripts\python.exe"
 $ConfigDir = Join-Path $env:APPDATA "MidiWin"
 $Config = Join-Path $ConfigDir "config.json"
 
-if (-not (Get-Command py -ErrorAction SilentlyContinue) -and
-    -not (Get-Command python -ErrorAction SilentlyContinue)) {
-    throw "Python 3.11 or newer is required. Install it from python.org or winget."
+function Resolve-Python {
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        $Versions = & py -0p 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            foreach ($Line in $Versions) {
+                if ($Line -match '-V:(3\.(1[1-9]|[2-9][0-9]))') {
+                    return @('py', '-3')
+                }
+            }
+        }
+    }
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        $Version = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+        if ([version]$Version -ge [version]'3.11') {
+            return @('python')
+        }
+    }
+    throw "Python 3.11 or newer is required. Install it with: winget install Python.Python.3.13"
 }
 
 if (-not (Test-Path $Venv)) {
-    if (Get-Command py -ErrorAction SilentlyContinue) {
-        py -3.11 -m venv $Venv
+    $PythonCommand = Resolve-Python
+    if ($PythonCommand[0] -eq 'py') {
+        & py -3 -m venv $Venv
     } else {
-        python -m venv $Venv
+        & python -m venv $Venv
     }
 }
 
