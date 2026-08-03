@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -14,6 +17,14 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
-      - run: python -m compileall -q midiwin
+      - run: python -m compileall -q midiwin midiwin-gui.py
       - run: python -m midiwin --validate-config --config config.default.json
-      - run: python -m pytest
+      - run: python -m pytest -v
+      - name: Build executable
+        shell: powershell
+        run: .\build-exe.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MIDIWIN-windows
+          path: dist/MIDIWIN
+          if-no-files-found: error
