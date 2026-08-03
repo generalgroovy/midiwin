@@ -3,94 +3,87 @@
 Windows-native sibling of [MIDILIN](https://github.com/generalgroovy/midilin).
 
 MIDIWIN turns Native Instruments Traktor Kontrol F1 and X1 MK1 hardware into
-Windows control surfaces for media, audio, launchers, scripts and focused-window
-movement, resizing and opacity.
+Windows control surfaces for media, audio, display brightness, launchers,
+scripts and focused-window movement, resizing and opacity.
 
-## Current baseline
+## Controller console
 
-Implemented:
+The Tk GUI provides:
 
-- F1 HID discovery and input through `hidapi`;
-- X1 MK1 raw USB discovery and input through `PyUSB`/WinUSB;
-- F1 buttons, pads, encoder, knobs and faders;
-- X1 buttons, four encoders and eight analog knobs;
-- media play/pause, previous, next and mute;
-- endpoint volume through `pycaw`;
-- focused-window close, move, resize, opacity, maximize and restore;
-- browser, Windows Terminal and configurable script slots;
-- Shift layers, monitor mode, dry-run mode, configuration validation and layout
-  display;
-- PowerShell installation and optional Startup shortcut;
-- Windows GitHub Actions validation and unit tests.
+- a representative front-panel layout for F1 and X1;
+- live highlighting of controls during read-only monitoring;
+- mapping and modifier-layer overview;
+- screen-brightness backend/display configuration and live testing;
+- device detection, configuration validation and diagnostics;
+- safe monitor/dry-run controls and active-runtime start/stop.
 
-Planned next: F1 RGB output, X1 LED output, graphical connection consent,
-monitor-transfer presets, virtual-desktop integration and richer visual themes.
-
-## Hardware driver note
-
-The F1 normally exposes a HID interface directly. X1 MK1 raw USB access may
-require assigning its interface to **WinUSB** with Zadig. Replacing the Native
-Instruments driver can prevent Traktor from using the same device until the
-original driver is restored. `setup.ps1` never changes USB drivers.
-
-## Install
-
-Clone or pull the repository, then open PowerShell inside it:
+Launch after installation:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\setup.ps1
+.\launch-gui.cmd
 ```
 
-The setup script creates `.venv`, installs the package and test dependencies,
-copies `config.default.json` to `%APPDATA%\MidiWin\config.json`, optionally
-creates a Startup shortcut, validates the configuration and runs the tests.
+The installer also creates **MIDIWIN Controller Console** shortcuts on the
+Desktop and in the Start menu.
 
-Install without autostart:
+## Install or update
 
 ```powershell
-.\setup.ps1 -NoStartup
+git pull --ff-only
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\setup.ps1 -ResetConfig -NoStartup
 ```
 
-Replace the active configuration while preserving a timestamped backup:
+`-ResetConfig` preserves the old configuration with a timestamped backup and
+installs the new F1 Knob 4 brightness mapping. Remove `-NoStartup` to install the
+background runtime at login.
+
+Optional standalone executable build:
 
 ```powershell
-.\setup.ps1 -ResetConfig
+.\setup.ps1 -ResetConfig -NoStartup -BuildExe
+```
+
+Result:
+
+```text
+dist\MIDIWIN\MIDIWIN.exe
+```
+
+## Display brightness
+
+F1 Knob 4 maps to `brightness_absolute`. MIDIWIN first uses
+`screen-brightness-control`, including supported DDC/CI displays, and then uses
+Windows `WmiMonitorBrightnessMethods.WmiSetBrightness` as a laptop-panel
+fallback. Configuration is stored under `display_controls.brightness`.
+
+```powershell
+.\.venv\Scripts\python.exe -m midiwin --diagnose-display
+.\.venv\Scripts\python.exe -m midiwin --set-brightness 50
 ```
 
 ## Run and test
 
 ```powershell
-# Detect supported hardware
 .\.venv\Scripts\python.exe -m midiwin --list-devices
-
-# Validate JSON mappings
 .\.venv\Scripts\python.exe -m midiwin --validate-config
-
-# Print the active layout
 .\.venv\Scripts\python.exe -m midiwin --show-layout
-
-# Display raw controller events only
 .\.venv\Scripts\python.exe -m midiwin --monitor
-
-# Route mappings but do not execute Windows actions
 .\.venv\Scripts\python.exe -m midiwin --dry-run
-
-# Run normally
 .\.venv\Scripts\python.exe -m midiwin
-
-# Run automated tests
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-Stop monitor, dry-run or normal mode with `Ctrl+C`.
+`--monitor` and `--dry-run` are read-only. MIDIWIN uses a PID lock to prevent two
+processes from owning the controllers concurrently.
 
 ## Default controls
 
 F1:
 
 - Knob 1: master volume
-- Knob 3: controller-light state value
+- Knob 3: controller-light state
+- Knob 4: screen brightness
 - Play 1–4: play/pause, previous, next, mute
 - Pad 1: browser
 - Pad 2: Windows Terminal
@@ -100,20 +93,21 @@ F1:
 X1:
 
 - Browse encoders: move focused window horizontally and vertically
-- Loop encoders: resize focused window width and height
-- FX2 Dry/Wet: focused-window opacity
+- Loop encoders: resize width and height
+- FX2 Dry/Wet: window opacity
 - FX1 On: maximize
 - FX2 On: restore
+
+## X1 driver
+
+X1 raw USB access requires WinUSB. Run `setup-x1-winusb.ps1` for the guarded
+Zadig workflow. The F1 remains on its HID driver.
 
 ## Configuration
 
 ```text
 %APPDATA%\MidiWin\config.json
 ```
-
-The repository default is [`config.default.json`](config.default.json).
-Configuration concepts mirror MIDILIN where practical, while actions remain
-platform-native.
 
 ## Related project
 
