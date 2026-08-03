@@ -2,92 +2,118 @@
 
 Windows-native sibling of [MIDILIN](https://github.com/generalgroovy/midilin).
 
-Use Native Instruments Traktor Kontrol F1 and X1 MK1 hardware as complementary
-Windows control surfaces for media, audio, applications, scripts, focused-window
-movement and sizing, monitor transfer, diagnostics, local-model parameters and
-interactive LEDs.
+MIDIWIN turns Native Instruments Traktor Kontrol F1 and X1 MK1 hardware into
+Windows control surfaces for media, audio, launchers, scripts and focused-window
+movement, resizing and opacity.
 
-- **F1:** desktop launchers, media, audio, display controls, workspaces through
-  Windows virtual desktops, model controls and sixteen Shift script slots.
-- **X1:** focused-window placement, movement, resizing, opacity, monitor transfer,
-  snap presets, diagnostics and eight Shift script slots.
+## Current baseline
 
-The Linux implementation lives in
-[`generalgroovy/midilin`](https://github.com/generalgroovy/midilin).
+Implemented:
 
-## Status
+- F1 HID discovery and input through `hidapi`;
+- X1 MK1 raw USB discovery and input through `PyUSB`/WinUSB;
+- F1 buttons, pads, encoder, knobs and faders;
+- X1 buttons, four encoders and eight analog knobs;
+- media play/pause, previous, next and mute;
+- endpoint volume through `pycaw`;
+- focused-window close, move, resize, opacity, maximize and restore;
+- browser, Windows Terminal and configurable script slots;
+- Shift layers, monitor mode, dry-run mode, configuration validation and layout
+  display;
+- PowerShell installation and optional Startup shortcut;
+- Windows GitHub Actions validation and unit tests.
 
-This repository contains a usable Windows foundation:
-
-- F1 HID input and RGB output through `hidapi`;
-- X1 MK1 raw USB input and LED output through `PyUSB`/WinUSB;
-- Win32 foreground-window close, move, resize, opacity, maximize, restore and
-  monitor-transfer actions;
-- media keys and absolute endpoint volume control;
-- configurable PowerShell, executable and Python script slots;
-- connection consent with remembered per-device decisions;
-- persistent LED brightness and visual themes;
-- monitor mode, dry-run mode, configuration validation and layout display;
-- PowerShell setup, autostart and uninstall scripts;
-- unit tests and GitHub Actions validation.
+Planned next: F1 RGB output, X1 LED output, graphical connection consent,
+monitor-transfer presets, virtual-desktop integration and richer visual themes.
 
 ## Hardware driver note
 
 The F1 normally exposes a HID interface directly. X1 MK1 raw USB access may
 require assigning its interface to **WinUSB** with Zadig. Replacing the Native
 Instruments driver can prevent Traktor from using the same device until the
-original driver is restored. The installer never changes USB drivers
-silently.
+original driver is restored. `setup.ps1` never changes USB drivers.
 
 ## Install
 
-Open PowerShell in the repository:
+Clone or pull the repository, then open PowerShell inside it:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\setup.ps1
 ```
 
-The setup script creates `.venv`, installs dependencies, copies the default
-configuration to `%APPDATA%\MidiWin`, and optionally creates a Startup shortcut.
+The setup script creates `.venv`, installs the package and test dependencies,
+copies `config.default.json` to `%APPDATA%\MidiWin\config.json`, optionally
+creates a Startup shortcut, validates the configuration and runs the tests.
 
-Run manually:
+Install without autostart:
 
 ```powershell
+.\setup.ps1 -NoStartup
+```
+
+Replace the active configuration while preserving a timestamped backup:
+
+```powershell
+.\setup.ps1 -ResetConfig
+```
+
+## Run and test
+
+```powershell
+# Detect supported hardware
 .\.venv\Scripts\python.exe -m midiwin --list-devices
+
+# Validate JSON mappings
 .\.venv\Scripts\python.exe -m midiwin --validate-config
+
+# Print the active layout
 .\.venv\Scripts\python.exe -m midiwin --show-layout
-.\.venv\Scripts\python.exe -m midiwin
-```
 
-Test physical controls without running system actions:
+# Display raw controller events only
+.\.venv\Scripts\python.exe -m midiwin --monitor
 
-```powershell
+# Route mappings but do not execute Windows actions
 .\.venv\Scripts\python.exe -m midiwin --dry-run
+
+# Run normally
+.\.venv\Scripts\python.exe -m midiwin
+
+# Run automated tests
+.\.venv\Scripts\python.exe -m pytest -v
 ```
 
-## Default configuration
+Stop monitor, dry-run or normal mode with `Ctrl+C`.
+
+## Default controls
+
+F1:
+
+- Knob 1: master volume
+- Knob 3: controller-light state value
+- Play 1–4: play/pause, previous, next, mute
+- Pad 1: browser
+- Pad 2: Windows Terminal
+- Reverse: close focused window
+- Shift + Pads 1–4: Codex, Ollama, Odysseus and custom script slots
+
+X1:
+
+- Browse encoders: move focused window horizontally and vertically
+- Loop encoders: resize focused window width and height
+- FX2 Dry/Wet: focused-window opacity
+- FX1 On: maximize
+- FX2 On: restore
+
+## Configuration
 
 ```text
 %APPDATA%\MidiWin\config.json
-%APPDATA%\MidiWin\defaults\actions.json
-%APPDATA%\MidiWin\defaults\f1.json
-%APPDATA%\MidiWin\defaults\x1.json
-%APPDATA%\MidiWin\defaults\scripts.json
-%APPDATA%\MidiWin\defaults\model.json
-%APPDATA%\MidiWin\defaults\visuals.json
 ```
 
-Configuration concepts intentionally mirror MIDILIN so mappings and script-slot
-ideas can be transferred between operating systems while action implementations
-remain platform-native.
-
-## Documentation
-
-- [`docs/LAYOUT.md`](docs/LAYOUT.md)
-- [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
-- [`docs/DRIVERS.md`](docs/DRIVERS.md)
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+The repository default is [`config.default.json`](config.default.json).
+Configuration concepts mirror MIDILIN where practical, while actions remain
+platform-native.
 
 ## Related project
 
