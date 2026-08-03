@@ -18,6 +18,9 @@ dependencies = [
   "psutil>=6.1.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
 [project.scripts]
 midiwin = "midiwin.cli:main"
 
