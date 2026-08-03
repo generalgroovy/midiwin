@@ -224,7 +224,7 @@ function Assert-NoConflictingApplications {
 
 function Invoke-Zadig {
     Write-Step 'Preparing the X1 WinUSB driver switch'
-    Write-Host @"
+    $instructions = @"
 Zadig will open elevated and is preconfigured for:
   - List All Devices
   - WinUSB as the default replacement driver
@@ -237,7 +237,8 @@ Inside Zadig, perform exactly these checks:
   5. Wait for success, then close Zadig.
 
 Do not select a USB hub, keyboard, mouse, F1, or composite parent.
-"@ -ForegroundColor Yellow
+"@
+    Write-Host $instructions -ForegroundColor Yellow
 
     [void](Read-Host 'Press Enter to launch Zadig as administrator')
     $process = Start-Process -FilePath $ZadigPath -Verb RunAs -PassThru
