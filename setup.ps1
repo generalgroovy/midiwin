@@ -1,13 +1,15 @@
 [CmdletBinding()]
 param(
     [switch]$ResetConfig,
-    [switch]$NoStartup
+    [switch]$NoStartup,
+    [switch]$BuildExe
 )
 
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Venv = Join-Path $Repo ".venv"
 $Python = Join-Path $Venv "Scripts\python.exe"
+$PythonW = Join-Path $Venv "Scripts\pythonw.exe"
 $ConfigDir = Join-Path $env:APPDATA "MidiWin"
 $Config = Join-Path $ConfigDir "config.json"
 
@@ -55,18 +57,39 @@ if (-not (Test-Path $Config)) {
     Copy-Item (Join-Path $Repo "config.default.json") $Config
 }
 
-if (-not $NoStartup) {
-    $Startup = [Environment]::GetFolderPath("Startup")
-    $Launcher = Join-Path $ConfigDir "start-midiwin.cmd"
-    @"
+$ActiveLauncher = Join-Path $ConfigDir "start-midiwin.cmd"
+@"
 @echo off
 cd /d "$Repo"
 "$Python" -m midiwin
-"@ | Set-Content -Encoding ASCII $Launcher
-    $ShortcutPath = Join-Path $Startup "MIDIWIN.lnk"
-    $Shell = New-Object -ComObject WScript.Shell
-    $Shortcut = $Shell.CreateShortcut($ShortcutPath)
-    $Shortcut.TargetPath = $Launcher
+"@ | Set-Content -Encoding ASCII $ActiveLauncher
+
+$GuiLauncher = Join-Path $ConfigDir "start-midiwin-gui.cmd"
+@"
+@echo off
+cd /d "$Repo"
+start "MIDIWIN" "$PythonW" -m midiwin.gui
+"@ | Set-Content -Encoding ASCII $GuiLauncher
+
+$Shell = New-Object -ComObject WScript.Shell
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$GuiShortcut = $Shell.CreateShortcut((Join-Path $Desktop "MIDIWIN Controller Console.lnk"))
+$GuiShortcut.TargetPath = $GuiLauncher
+$GuiShortcut.WorkingDirectory = $Repo
+$GuiShortcut.Description = "Configure and monitor Traktor F1/X1 Windows controls"
+$GuiShortcut.Save()
+
+$Programs = [Environment]::GetFolderPath("Programs")
+$ProgramsShortcut = $Shell.CreateShortcut((Join-Path $Programs "MIDIWIN Controller Console.lnk"))
+$ProgramsShortcut.TargetPath = $GuiLauncher
+$ProgramsShortcut.WorkingDirectory = $Repo
+$ProgramsShortcut.Description = "Configure and monitor Traktor F1/X1 Windows controls"
+$ProgramsShortcut.Save()
+
+if (-not $NoStartup) {
+    $Startup = [Environment]::GetFolderPath("Startup")
+    $Shortcut = $Shell.CreateShortcut((Join-Path $Startup "MIDIWIN Runtime.lnk"))
+    $Shortcut.TargetPath = $ActiveLauncher
     $Shortcut.WorkingDirectory = $Repo
     $Shortcut.WindowStyle = 7
     $Shortcut.Save()
@@ -75,10 +98,16 @@ cd /d "$Repo"
 & $Python -m midiwin --validate-config
 & $Python -m pytest
 
+if ($BuildExe) {
+    & (Join-Path $Repo "build-exe.ps1")
+}
+
 Write-Host ""
 Write-Host "MIDIWIN installed." -ForegroundColor Green
-Write-Host "List devices:  .\.venv\Scripts\python.exe -m midiwin --list-devices"
-Write-Host "Monitor input:  .\.venv\Scripts\python.exe -m midiwin --monitor"
-Write-Host "Safe test:      .\.venv\Scripts\python.exe -m midiwin --dry-run"
-Write-Host "Run normally:   .\.venv\Scripts\python.exe -m midiwin"
-Write-Host "Config:         $Config"
+Write-Host "GUI shortcut:    Desktop -> MIDIWIN Controller Console"
+Write-Host "Open GUI:        .\launch-gui.cmd"
+Write-Host "List devices:    .\.venv\Scripts\python.exe -m midiwin --list-devices"
+Write-Host "Monitor input:   .\.venv\Scripts\python.exe -m midiwin --monitor"
+Write-Host "Safe test:       .\.venv\Scripts\python.exe -m midiwin --dry-run"
+Write-Host "Run normally:    .\.venv\Scripts\python.exe -m midiwin"
+Write-Host "Config:          $Config"
