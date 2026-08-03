@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import ctypes
-import json
 import os
 import subprocess
 from ctypes import wintypes
-from pathlib import Path
 from typing import Any
 
 from .common import APP_DIR, ControlEvent
@@ -88,6 +86,70 @@ class ActionDispatcher:
         endpoint = device.EndpointVolume
         endpoint.SetMasterVolumeLevelScalar(float(ratio), None)
 
+    def _brightness_settings(self) -> dict[str, Any]:
+        controls = self.config.get("display_controls", {})
+        if not isinstance(controls, dict):
+            return {}
+        value = controls.get("brightness", {})
+        return value if isinstance(value, dict) else {}
+
+    def set_brightness_percent(self, percent: int,
+                               mapping: dict[str, Any] | None = None) -> bool:
+        mapping = mapping or {}
+        settings = self._brightness_settings()
+        minimum = int(mapping.get("minimum_percent", settings.get("minimum_percent", 1)))
+        percent = min(max(int(percent), minimum), 100)
+        display: Any = mapping.get("display", settings.get("display", None))
+        if display == "":
+            display = None
+        self._log(f"action=brightness_absolute percent={percent} display={display!r}")
+        if self.dry_run:
+            return True
+        try:
+            import screen_brightness_control as sbc
+            kwargs = {"display": display} if display is not None else {}
+            sbc.set_brightness(percent, **kwargs)
+            return True
+        except Exception as primary:
+            self._log(f"screen_brightness_control failed: {primary}")
+
+        command = [
+            "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+            "$m=Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods "
+            "-ErrorAction Stop | Where-Object Active; "
+            "if(-not $m){throw 'No active WMI brightness monitor'}; "
+            f"$m | Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=0;Brightness=[byte]{percent}}} "
+            "-ErrorAction Stop | Out-Null",
+        ]
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
+        if result.returncode == 0:
+            return True
+        self._log("WMI brightness fallback failed: " +
+                  (result.stderr or result.stdout).strip())
+        return False
+
+    def diagnose_displays(self) -> list[str]:
+        lines: list[str] = []
+        try:
+            import screen_brightness_control as sbc
+            monitors = sbc.list_monitors_info()
+            if monitors:
+                for index, monitor in enumerate(monitors):
+                    lines.append(f"display[{index}]={monitor}")
+            else:
+                lines.append("screen_brightness_control found no displays")
+        except Exception as exc:
+            lines.append(f"screen_brightness_control error: {exc}")
+        command = [
+            "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+            "Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods "
+            "-ErrorAction SilentlyContinue | Select-Object Active,InstanceName | Format-List | Out-String",
+        ]
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
+        text = (result.stdout or result.stderr).strip()
+        lines.append("WMI brightness methods:\n" + (text or "none"))
+        return lines
+
     def _controller_brightness(self, ratio: float) -> None:
         path = APP_DIR / "controller-brightness"
         value = round(ratio * 100)
@@ -108,7 +170,7 @@ class ActionDispatcher:
         if isinstance(command, str):
             subprocess.Popen(["powershell.exe", "-NoProfile", "-Command", command])
         elif isinstance(command, list):
-            subprocess.Popen([str(v) for v in command])
+            subprocess.Popen([os.path.expandvars(str(v)) for v in command])
         else:
             raise ValueError(f"invalid command for slot {slot}")
 
@@ -125,6 +187,8 @@ class ActionDispatcher:
             self._media_key(VK_VOLUME_MUTE, action)
         elif action == "volume_absolute":
             self._set_volume(event.ratio)
+        elif action == "brightness_absolute":
+            self.set_brightness_percent(round(event.ratio * 100), mapping)
         elif action == "controller_brightness_absolute":
             self._controller_brightness(event.ratio)
         elif action == "close_focused_window":
