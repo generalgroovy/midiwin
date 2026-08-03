@@ -8,7 +8,8 @@ if (-not (Test-Path $Python)) { throw 'Run setup.ps1 first.' }
 & $Python -m PyInstaller --noconfirm --clean --windowed `
   --name MIDIWIN `
   --collect-all libusb_package `
-  --hidden-import screen_brightness_control `
+  --collect-all screen_brightness_control `
   --add-data "$Repo\config.default.json;." `
-  "$Repo\midiwin\gui.py"
+  "$Repo\midiwin-gui.py"
+if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 Write-Host "Executable: $Repo\dist\MIDIWIN\MIDIWIN.exe" -ForegroundColor Green
