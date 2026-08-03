@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
-from .common import APP_DIR, DEFAULT_CONFIG, load_config, validate_config
+from .common import APP_DIR, load_config, validate_config
 from .hardware import list_devices, run_runtime
 from .router import EventRouter
 
@@ -57,8 +56,10 @@ def main() -> int:
             print(f"ERROR: {error}")
         return 1
 
-    router = EventRouter(config, dry_run=args.dry_run, monitor=args.monitor or args.dry_run)
-    print(f"MIDIWIN running. Config: {args.config or APP_DIR / 'config.json'}")
+    read_only = args.monitor or args.dry_run
+    router = EventRouter(config, dry_run=read_only, monitor=read_only)
+    mode = "monitor" if args.monitor else "dry-run" if args.dry_run else "active"
+    print(f"MIDIWIN running in {mode} mode. Config: {args.config or APP_DIR / 'config.json'}")
     print("Press Ctrl+C to stop.")
     run_runtime(router.emit)
     return 0
