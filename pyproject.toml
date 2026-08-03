@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "midiwin"
+version = "0.1.0"
+description = "Traktor X1/F1 Windows system controller"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "generalgroovy"}]
+dependencies = [
+  "hidapi>=0.14.0",
+  "pyusb>=1.3.1",
+  "pycaw>=20240210",
+  "comtypes>=1.4.8",
+  "psutil>=6.1.0",
+]
+
+[project.scripts]
+midiwin = "midiwin.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["midiwin*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
