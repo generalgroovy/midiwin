@@ -66,21 +66,59 @@ X1_ANALOGS = {
 }
 
 
+def _libusb_backend() -> Any:
+    try:
+        import libusb_package
+    except ImportError as exc:
+        raise RuntimeError(
+            "libusb-package is not installed; rerun setup.ps1"
+        ) from exc
+    backend = libusb_package.get_libusb1_backend()
+    if backend is None:
+        raise RuntimeError(
+            "bundled libusb backend could not be loaded; verify Python and package architecture match"
+        )
+    return backend
+
+
+def _find_x1(*, find_all: bool = False) -> Any:
+    import usb.core
+
+    return usb.core.find(
+        find_all=find_all,
+        idVendor=NI_VENDOR_ID,
+        idProduct=X1_PRODUCT_ID,
+        backend=_libusb_backend(),
+    )
+
+
 def list_devices() -> list[str]:
     found: list[str] = []
     try:
         import hid
         for item in hid.enumerate(NI_VENDOR_ID, F1_PRODUCT_ID):
-            found.append(f"F1 HID path={item.get('path')!r} serial={item.get('serial_number')!r}")
+            found.append(
+                f"F1 HID path={item.get('path')!r} serial={item.get('serial_number')!r}"
+            )
     except Exception as exc:
         found.append(f"F1 HID unavailable: {exc}")
+
     try:
-        import usb.core
-        devices = list(usb.core.find(find_all=True, idVendor=NI_VENDOR_ID, idProduct=X1_PRODUCT_ID) or [])
-        for device in devices:
-            found.append(f"X1 USB bus={getattr(device, 'bus', '?')} address={getattr(device, 'address', '?')}")
+        devices = list(_find_x1(find_all=True) or [])
+        if devices:
+            for device in devices:
+                found.append(
+                    f"X1 USB bus={getattr(device, 'bus', '?')} "
+                    f"address={getattr(device, 'address', '?')} backend=libusb1"
+                )
+        else:
+            found.append(
+                "X1 USB not visible to libusb. The backend loaded correctly; "
+                "assign WinUSB to Traktor Kontrol X1 (17cc:2305) with Zadig, "
+                "then reconnect it."
+            )
     except Exception as exc:
-        found.append(f"X1 USB unavailable: {exc}")
+        found.append(f"X1 USB backend unavailable: {exc}")
     return found
 
 
@@ -118,13 +156,24 @@ def run_f1(emit: Callable[[ControlEvent], None], stop: threading.Event) -> None:
                 for control, mask in F1_BUTTON_MASKS.items():
                     if changed & mask:
                         pressed = bool(buttons & mask)
-                        emit(ControlEvent("f1", control, "press" if pressed else "release", int(pressed)))
+                        emit(
+                            ControlEvent(
+                                "f1",
+                                control,
+                                "press" if pressed else "release",
+                                int(pressed),
+                            )
+                        )
             previous_buttons = buttons
             encoder = report[5]
             if previous_encoder is not None:
                 delta = ((encoder - previous_encoder + 128) % 256) - 128
                 if delta:
-                    emit(ControlEvent("f1", "select_encoder", "relative", delta, -128, 127))
+                    emit(
+                        ControlEvent(
+                            "f1", "select_encoder", "relative", delta, -128, 127
+                        )
+                    )
             previous_encoder = encoder
             for control, offset in F1_ANALOG_OFFSETS.items():
                 value = struct.unpack_from("<H", report, offset)[0]
@@ -136,11 +185,13 @@ def run_f1(emit: Callable[[ControlEvent], None], stop: threading.Event) -> None:
 
 
 def run_x1(emit: Callable[[ControlEvent], None], stop: threading.Event) -> None:
-    import usb.core
     import usb.util
-    device = usb.core.find(idVendor=NI_VENDOR_ID, idProduct=X1_PRODUCT_ID)
+
+    device = _find_x1()
     if device is None:
-        raise RuntimeError("X1 not found or WinUSB driver not installed")
+        raise RuntimeError(
+            "X1 not visible to libusb. Install WinUSB for USB 17cc:2305 with Zadig."
+        )
     device.set_configuration()
     previous_buttons: dict[str, bool] = {}
     previous_encoders: dict[str, int] = {}
@@ -160,7 +211,14 @@ def run_x1(emit: Callable[[ControlEvent], None], stop: threading.Event) -> None:
                 previous = previous_buttons.get(control)
                 previous_buttons[control] = pressed
                 if previous is not None and previous != pressed:
-                    emit(ControlEvent("x1", control, "press" if pressed else "release", int(pressed)))
+                    emit(
+                        ControlEvent(
+                            "x1",
+                            control,
+                            "press" if pressed else "release",
+                            int(pressed),
+                        )
+                    )
             for control, (index, high_nibble) in X1_ENCODERS.items():
                 position = raw[index] >> 4 if high_nibble else raw[index] & 0x0F
                 previous = previous_encoders.get(control)
