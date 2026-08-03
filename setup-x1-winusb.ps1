@@ -151,8 +151,9 @@ function Get-Zadig {
         if ($LASTEXITCODE -ne 0) {
             throw 'winget could not install Zadig.'
         }
+        $zadigCommand = Get-Command zadig.exe -ErrorAction SilentlyContinue
         $candidate = @(
-            (Get-Command zadig.exe -ErrorAction SilentlyContinue).Source,
+            if ($zadigCommand) { $zadigCommand.Source }
             (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\zadig.exe')
         ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
         if (-not $candidate) {
@@ -191,7 +192,7 @@ PID = 0x2305
 }
 
 function Wait-ForF1Disconnect {
-    $f1 = Get-UsbDevice $F1VidPid
+    $f1 = @(Get-UsbDevice $F1VidPid)
     if ($f1.Count -eq 0) {
         return
     }
@@ -200,7 +201,7 @@ function Wait-ForF1Disconnect {
     [void](Read-Host 'Press Enter after disconnecting the F1')
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $deadline) {
-        if ((Get-UsbDevice $F1VidPid).Count -eq 0) {
+        if (@(Get-UsbDevice $F1VidPid).Count -eq 0) {
             Write-Host 'F1 disconnected.' -ForegroundColor Green
             return
         }
@@ -252,7 +253,7 @@ Do not select a USB hub, keyboard, mouse, F1, or composite parent.
 
 function Verify-WinUsb {
     Write-Step 'Verifying the X1 driver'
-    $devices = Get-UsbDevice $X1VidPid
+    $devices = @(Get-UsbDevice $X1VidPid)
     if ($devices.Count -eq 0) {
         Write-Warning 'Windows does not currently report the X1. Reconnect it and rerun the script.'
         return $false
@@ -282,7 +283,7 @@ function Verify-WinUsb {
 Assert-Repository
 Update-MidiWin
 
-$x1 = Get-UsbDevice $X1VidPid
+$x1 = @(Get-UsbDevice $X1VidPid)
 if ($x1.Count -eq 0) {
     throw 'Traktor Kontrol X1 (USB ID 17CC:2305) is not present. Connect it and rerun the script.'
 }
