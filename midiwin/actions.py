@@ -7,6 +7,7 @@ from ctypes import wintypes
 from typing import Any
 
 from .common import APP_DIR, ControlEvent
+from .eventlog import emit
 
 user32 = ctypes.windll.user32
 
@@ -35,6 +36,7 @@ class ActionDispatcher:
 
     def _log(self, message: str) -> None:
         print(message, flush=True)
+        emit("action_log", message=message, dry_run=self.dry_run)
 
     @staticmethod
     def _foreground() -> int:
@@ -109,6 +111,7 @@ class ActionDispatcher:
             import screen_brightness_control as sbc
             kwargs = {"display": display} if display is not None else {}
             sbc.set_brightness(percent, **kwargs)
+            emit("action_result", action="brightness_absolute", backend="screen_brightness_control", success=True, percent=percent)
             return True
         except Exception as primary:
             self._log(f"screen_brightness_control failed: {primary}")
@@ -123,9 +126,11 @@ class ActionDispatcher:
         ]
         result = subprocess.run(command, text=True, capture_output=True, check=False)
         if result.returncode == 0:
+            emit("action_result", action="brightness_absolute", backend="wmi", success=True, percent=percent)
             return True
-        self._log("WMI brightness fallback failed: " +
-                  (result.stderr or result.stdout).strip())
+        error = (result.stderr or result.stdout).strip()
+        self._log("WMI brightness fallback failed: " + error)
+        emit("action_result", action="brightness_absolute", backend="wmi", success=False, percent=percent, error=error)
         return False
 
     def diagnose_displays(self) -> list[str]:
@@ -176,6 +181,29 @@ class ActionDispatcher:
 
     def dispatch(self, mapping: dict[str, Any], event: ControlEvent) -> None:
         action = str(mapping["action"])
+        emit(
+            "action_dispatch",
+            action=action,
+            dry_run=self.dry_run,
+            mapping={
+                "device": mapping.get("device"),
+                "control": mapping.get("control"),
+                "kind": mapping.get("kind"),
+                "requires": mapping.get("requires", []),
+                "unless": mapping.get("unless", []),
+                "slot": mapping.get("slot"),
+                "parameter": mapping.get("parameter"),
+            },
+            event={
+                "device": event.device,
+                "control": event.control,
+                "kind": event.kind,
+                "value": event.value,
+                "minimum": event.minimum,
+                "maximum": event.maximum,
+                "ratio": event.ratio,
+            },
+        )
         sensitivity = int(mapping.get("sensitivity", 40))
         if action == "media_play_pause":
             self._media_key(VK_MEDIA_PLAY_PAUSE, action)
