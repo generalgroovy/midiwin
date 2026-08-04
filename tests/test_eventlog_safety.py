@@ -40,6 +40,21 @@ def test_actions_mode_suppresses_high_volume_routing_noise(
     assert [item["kind"] for item in read_tail(10)] == ["mapping_selected"]
 
 
+def test_off_mode_creates_no_ledger(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "events.jsonl"
+    monkeypatch.setenv("MIDIWIN_EVENT_LOG", str(target))
+    monkeypatch.setenv("MIDIWIN_EVENT_LOG_MODE", "off")
+
+    event = emit("mapping_selected", action="volume_absolute")
+
+    assert event["kind"] == "mapping_selected"
+    assert not target.exists()
+    assert read_tail(10) == []
+
+
 def test_invalid_limits_fail_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MIDIWIN_EVENT_LOG", str(tmp_path / "events.jsonl"))
     monkeypatch.setenv("MIDIWIN_EVENT_LOG_MAX_BYTES", "100")
