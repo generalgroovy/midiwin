@@ -6,6 +6,7 @@ import getpass
 import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -78,13 +79,10 @@ def _write_runtime_identity(identity: dict[str, Any]) -> None:
 def _process_matches_identity(process: Any, identity: dict[str, Any]) -> bool:
     if not process.is_running():
         return False
-    try:
-        name = str(process.name()).lower()
-        command_line = " ".join(str(item) for item in process.cmdline()).lower()
-        username = str(process.username())
-        created = float(process.create_time())
-    except Exception:
-        return False
+    name = str(process.name()).lower()
+    command_line = " ".join(str(item) for item in process.cmdline()).lower()
+    username = str(process.username())
+    created = float(process.create_time())
     marker_matches = "midiwin" in name or "midiwin" in command_line
     if not marker_matches:
         return False
@@ -110,7 +108,7 @@ def _runtime_process():
         process = psutil.Process(int(identity["pid"]))
         if _process_matches_identity(process, identity):
             return process
-    except psutil.NoSuchProcess:
+    except (psutil.NoSuchProcess, psutil.ZombieProcess):
         pass
     except psutil.AccessDenied as exc:
         raise RuntimeError(
@@ -160,9 +158,7 @@ def claim_runtime() -> None:
         "pid": os.getpid(),
         "create_time": current.create_time(),
         "username": current.username(),
-        "claimed_at": __import__("datetime").datetime.now(
-            __import__("datetime").timezone.utc
-        ).isoformat(),
+        "claimed_at": datetime.now(timezone.utc).isoformat(),
     }
     _write_runtime_identity(identity)
     emit(
