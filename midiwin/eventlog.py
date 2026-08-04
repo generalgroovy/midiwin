@@ -84,10 +84,22 @@ def _rotated(path: Path, index: int) -> Path:
     return path.with_name(f"{path.name}.{index}")
 
 
+def _existing_rotation_indices(path: Path) -> set[int]:
+    indices: set[int] = set()
+    if not path.parent.exists():
+        return indices
+    prefix = f"{path.name}."
+    for candidate in path.parent.glob(f"{path.name}.*"):
+        suffix = candidate.name[len(prefix):]
+        if suffix.isdigit() and int(suffix) > 0:
+            indices.add(int(suffix))
+    return indices
+
+
 def event_files(path: Path | None = None) -> list[Path]:
     target = path or event_path()
-    backups = backup_count()
-    return [_rotated(target, index) for index in range(backups, 0, -1)] + [target]
+    indices = set(range(1, backup_count() + 1)) | _existing_rotation_indices(target)
+    return [_rotated(target, index) for index in sorted(indices, reverse=True)] + [target]
 
 
 def redact(value: Any) -> Any:
@@ -118,6 +130,11 @@ def _rotate_if_needed(path: Path, incoming_bytes: int) -> None:
     if not path.exists() or path.stat().st_size + incoming_bytes <= max_bytes():
         return
     backups = backup_count()
+    for index in sorted(_existing_rotation_indices(path), reverse=True):
+        if index >= backups:
+            stale = _rotated(path, index)
+            _assert_regular_target(stale)
+            stale.unlink(missing_ok=True)
     oldest = _rotated(path, backups)
     _assert_regular_target(oldest)
     oldest.unlink(missing_ok=True)
