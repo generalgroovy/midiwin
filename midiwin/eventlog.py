@@ -127,9 +127,10 @@ def _should_persist(kind: str) -> bool:
 
 def _rotate_if_needed(path: Path, incoming_bytes: int) -> None:
     _assert_regular_target(path)
-    if not path.exists() or path.stat().st_size + incoming_bytes <= max_bytes():
-        return
+    limit = max_bytes()
     backups = backup_count()
+    if not path.exists() or path.stat().st_size + incoming_bytes <= limit:
+        return
     for index in sorted(_existing_rotation_indices(path), reverse=True):
         if index >= backups:
             stale = _rotated(path, index)
