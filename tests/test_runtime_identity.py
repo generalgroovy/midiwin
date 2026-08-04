@@ -181,7 +181,7 @@ def test_json_status_exposes_retention_policy(
     assert len(event_log["segments"]) == 3
 
 
-def test_legacy_pid_file_is_verified_by_runtime_marker(
+def test_legacy_pid_only_identity_is_rejected_and_removed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -191,4 +191,6 @@ def test_legacy_pid_file_is_verified_by_runtime_marker(
     process = FakeProcess(create_time=999.0)
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil(process))
 
-    assert cli._runtime_process() is process
+    assert cli._runtime_process() is None
+    assert not pid_file.exists()
+    assert not process.terminated
