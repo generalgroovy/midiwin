@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .actions import ActionDispatcher
+from .autocode import perform_action
 from .common import ControlEvent
 from .eventlog import emit as emit_event
 
@@ -19,6 +20,27 @@ class EventRouter:
         if event.control in {"shift", "hotcue"}:
             return f"{event.device}.{event.control}"
         return None
+
+    def _dispatch(self, mapping: dict[str, Any], event: ControlEvent) -> None:
+        action = str(mapping.get("action", ""))
+        if action.startswith("autocode_"):
+            selected = action.removeprefix("autocode_").replace("_", "-")
+            if self.dry_run:
+                emit_event(
+                    "autocode_action_dry_run",
+                    action=selected,
+                    arbitrary_commands=False,
+                )
+                return
+            result = perform_action(self.config, selected)
+            if not result.get("ok", False):
+                raise RuntimeError(
+                    result.get("stderr")
+                    or result.get("stdout")
+                    or f"Autocode action failed: {selected}"
+                )
+            return
+        self.dispatcher.dispatch(mapping, event)
 
     def emit(self, event: ControlEvent) -> None:
         emit_event(
@@ -80,7 +102,7 @@ class EventRouter:
                 unless=sorted(excluded),
                 held_modifiers=sorted(self.modifiers),
             )
-            self.dispatcher.dispatch(mapping, event)
+            self._dispatch(mapping, event)
         if matched == 0:
             emit_event(
                 "mapping_unmatched",
