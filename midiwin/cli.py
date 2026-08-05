@@ -2,39 +2,119 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import getpass
+import json
 import os
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .actions import ActionDispatcher
 from .common import APP_DIR, load_config, validate_config
+from .eventlog import backup_count, clear as clear_events
+from .eventlog import emit, event_files, event_path, log_mode, max_bytes, read_tail
 from .hardware import list_devices, run_runtime
 from .router import EventRouter
 
 PID_FILE = APP_DIR / "runtime.pid"
 
 
-def _read_runtime_pid() -> int | None:
+def _normalize_user(value: str) -> str:
+    return value.replace("/", "\\").rsplit("\\", 1)[-1].strip().lower()
+
+
+def _remove_pid_file() -> None:
+    if PID_FILE.is_symlink():
+        raise RuntimeError(f"runtime PID file must not be a symbolic link: {PID_FILE}")
+    PID_FILE.unlink(missing_ok=True)
+
+
+def _read_runtime_identity() -> dict[str, Any] | None:
+    if PID_FILE.is_symlink():
+        raise RuntimeError(f"runtime PID file must not be a symbolic link: {PID_FILE}")
     try:
-        return int(PID_FILE.read_text(encoding="ascii").strip())
-    except (FileNotFoundError, ValueError):
+        text = PID_FILE.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
         return None
+    if not text:
+        _remove_pid_file()
+        return None
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            return {"pid": int(text), "legacy": True}
+        except ValueError:
+            _remove_pid_file()
+            return None
+    if not isinstance(value, dict) or not isinstance(value.get("pid"), int):
+        _remove_pid_file()
+        return None
+    return value
+
+
+def _read_runtime_pid() -> int | None:
+    identity = _read_runtime_identity()
+    return int(identity["pid"]) if identity else None
+
+
+def _write_runtime_identity(identity: dict[str, Any]) -> None:
+    if PID_FILE.is_symlink():
+        raise RuntimeError(f"runtime PID file must not be a symbolic link: {PID_FILE}")
+    PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd, raw = tempfile.mkstemp(prefix=".runtime.pid.", dir=PID_FILE.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(identity, handle, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(raw, PID_FILE)
+    finally:
+        if os.path.exists(raw):
+            os.unlink(raw)
+
+
+def _process_matches_identity(process: Any, identity: dict[str, Any]) -> bool:
+    if not process.is_running():
+        return False
+    name = str(process.name()).lower()
+    command_line = " ".join(str(item) for item in process.cmdline()).lower()
+    username = str(process.username())
+    created = float(process.create_time())
+    marker_matches = "midiwin" in name or "midiwin" in command_line
+    if not marker_matches:
+        return False
+    expected_user = identity.get("username")
+    if expected_user:
+        if _normalize_user(username) != _normalize_user(str(expected_user)):
+            return False
+    elif _normalize_user(username) != _normalize_user(getpass.getuser()):
+        return False
+    expected_created = identity.get("create_time")
+    if expected_created is not None and abs(created - float(expected_created)) > 0.01:
+        return False
+    return True
 
 
 def _runtime_process():
-    pid = _read_runtime_pid()
-    if not pid:
+    identity = _read_runtime_identity()
+    if not identity:
         return None
     try:
         import psutil
-        process = psutil.Process(pid)
-        if process.is_running() and "python" in process.name().lower():
+
+        process = psutil.Process(int(identity["pid"]))
+        if _process_matches_identity(process, identity):
             return process
-    except Exception:
+    except (psutil.NoSuchProcess, psutil.ZombieProcess):
         pass
-    try:
-        PID_FILE.unlink()
-    except FileNotFoundError:
-        pass
+    except psutil.AccessDenied as exc:
+        raise RuntimeError(
+            f"cannot verify MIDIWIN runtime PID {identity['pid']}: access denied"
+        ) from exc
+    _remove_pid_file()
     return None
 
 
@@ -42,16 +122,23 @@ def stop_runtime() -> bool:
     process = _runtime_process()
     if process is None:
         print("MIDIWIN runtime is not running.")
+        emit("runtime_stop_skipped", reason="not-running")
         return False
+    import psutil
+
+    emit("runtime_stop_requested", pid=process.pid, create_time=process.create_time())
     process.terminate()
+    forced = False
     try:
         process.wait(timeout=4)
-    except Exception:
+    except psutil.TimeoutExpired:
+        forced = True
         process.kill()
-    try:
-        PID_FILE.unlink()
-    except FileNotFoundError:
+        process.wait(timeout=4)
+    except psutil.NoSuchProcess:
         pass
+    _remove_pid_file()
+    emit("runtime_stopped", pid=process.pid, forced=forced)
     print(f"Stopped MIDIWIN runtime PID {process.pid}.")
     return True
 
@@ -63,15 +150,38 @@ def claim_runtime() -> None:
             f"MIDIWIN is already running as PID {process.pid}. "
             "Use `python -m midiwin --stop-runtime` first."
         )
-    APP_DIR.mkdir(parents=True, exist_ok=True)
-    PID_FILE.write_text(str(os.getpid()), encoding="ascii")
+    import psutil
+
+    current = psutil.Process(os.getpid())
+    identity = {
+        "schema_version": 1,
+        "pid": os.getpid(),
+        "create_time": current.create_time(),
+        "username": current.username(),
+        "claimed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _write_runtime_identity(identity)
+    emit(
+        "runtime_claimed",
+        pid=os.getpid(),
+        create_time=identity["create_time"],
+        pid_file=str(PID_FILE),
+    )
 
     def release() -> None:
         try:
-            if _read_runtime_pid() == os.getpid():
-                PID_FILE.unlink()
-        except FileNotFoundError:
+            persisted = _read_runtime_identity()
+            if (
+                persisted
+                and persisted.get("pid") == os.getpid()
+                and abs(float(persisted.get("create_time", -1)) - float(identity["create_time"]))
+                <= 0.01
+            ):
+                _remove_pid_file()
+                emit("runtime_released", pid=os.getpid())
+        except (FileNotFoundError, RuntimeError, TypeError, ValueError):
             pass
+
     atexit.register(release)
 
 
@@ -88,18 +198,95 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--diagnose-display", action="store_true")
     parser.add_argument("--runtime-status", action="store_true")
     parser.add_argument("--stop-runtime", action="store_true")
+    parser.add_argument("--event-log", type=Path, help="Override the JSONL event-ledger path")
+    parser.add_argument("--event-tail", type=int, metavar="COUNT")
+    parser.add_argument("--clear-event-log", action="store_true")
+    parser.add_argument("--json-status", action="store_true")
     return parser
+
+
+def _status(config_path: Path | None) -> dict[str, object]:
+    config = load_config(config_path)
+    errors = validate_config(config)
+    runtime_error = None
+    try:
+        process = _runtime_process()
+    except RuntimeError as exc:
+        process = None
+        runtime_error = str(exc)
+    try:
+        devices = list_devices()
+        device_error = None
+    except Exception as exc:
+        devices = []
+        device_error = str(exc)
+    path = event_path()
+    segments = [
+        {
+            "path": str(segment),
+            "exists": segment.exists(),
+            "bytes": segment.stat().st_size if segment.exists() else 0,
+        }
+        for segment in event_files(path)
+    ]
+    return {
+        "schema_version": 1,
+        "application": "midiwin",
+        "config": str((config_path or APP_DIR / "config.json").expanduser()),
+        "config_valid": not errors,
+        "config_errors": errors,
+        "enabled_mappings": sum(
+            1
+            for mapping in config.get("mappings", [])
+            if isinstance(mapping, dict) and mapping.get("enabled", True)
+        ),
+        "runtime": {
+            "running": process is not None,
+            "pid": process.pid if process is not None else None,
+            "create_time": process.create_time() if process is not None else None,
+            "pid_file": str(PID_FILE),
+            "verification_error": runtime_error,
+        },
+        "devices": devices,
+        "device_error": device_error,
+        "event_log": {
+            "path": str(path),
+            "mode": log_mode(),
+            "max_bytes": max_bytes(),
+            "backup_count": backup_count(),
+            "segments": segments,
+            "total_bytes": sum(int(segment["bytes"]) for segment in segments),
+            "recent_events": len(read_tail(100)),
+        },
+    }
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.event_log:
+        os.environ["MIDIWIN_EVENT_LOG"] = str(args.event_log.expanduser())
     if args.gui:
         from .gui import main as gui_main
+
         return gui_main()
+    if args.clear_event_log:
+        removed = clear_events()
+        print(f"Event log {'removed' if removed else 'already absent'}: {event_path()}")
+        return 0
+    if args.event_tail is not None:
+        print(json.dumps(read_tail(args.event_tail), indent=2, ensure_ascii=False))
+        return 0
+    if args.json_status:
+        print(json.dumps(_status(args.config), indent=2, ensure_ascii=False))
+        return 0
     if args.stop_runtime:
         return 0 if stop_runtime() else 1
     if args.runtime_status:
-        process = _runtime_process()
+        try:
+            process = _runtime_process()
+        except RuntimeError as exc:
+            print(f"MIDIWIN runtime: unverifiable ({exc})")
+            return 2
         if process is None:
             print("MIDIWIN runtime: stopped")
             return 1
@@ -122,7 +309,7 @@ def main() -> int:
         return 0
     if args.show_layout:
         for mapping in config.get("mappings", []):
-            if mapping.get("enabled", True):
+            if isinstance(mapping, dict) and mapping.get("enabled", True):
                 requirements = "+".join(mapping.get("requires", []))
                 layer = f" [{requirements}]" if requirements else ""
                 detail = mapping.get("slot") or mapping.get("parameter") or ""
@@ -136,6 +323,7 @@ def main() -> int:
     if errors:
         for error in errors:
             print(f"ERROR: {error}")
+        emit("runtime_rejected", reason="invalid-config", errors=errors)
         return 1
     dispatcher = ActionDispatcher(config)
     if args.set_brightness is not None:
@@ -149,7 +337,16 @@ def main() -> int:
     read_only = args.monitor or args.dry_run
     router = EventRouter(config, dry_run=read_only, monitor=read_only)
     mode = "monitor" if args.monitor else "dry-run" if args.dry_run else "active"
+    emit(
+        "runtime_started",
+        pid=os.getpid(),
+        mode=mode,
+        config=str(args.config or APP_DIR / "config.json"),
+        event_log=str(event_path()),
+        event_log_mode=log_mode(),
+    )
     print(f"MIDIWIN running in {mode} mode. Config: {args.config or APP_DIR / 'config.json'}")
+    print(f"Structured event log: {event_path()} ({log_mode()} mode)")
     print("Press Ctrl+C to stop.")
     run_runtime(router.emit)
     return 0

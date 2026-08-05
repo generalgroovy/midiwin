@@ -14,6 +14,17 @@
     "brightness": 100,
     "brightness_state_file": "%APPDATA%\\MidiWin\\controller-brightness"
   },
+  "autocode": {
+    "enabled": false,
+    "transport": "ssh",
+    "ssh_binary": "ssh.exe",
+    "ssh_host": "otp@opitop",
+    "remote_binary": "autocode-local",
+    "workspace": "/home/otp/Projects/flux2",
+    "connect_timeout_seconds": 5,
+    "poll_seconds": 1.0,
+    "audio_cue": true
+  },
   "script_slots": {
     "codex": {
       "label": "Codex",
@@ -51,6 +62,16 @@
     {"device": "f1", "control": "grid_2", "kind": "press", "action": "script_slot", "slot": "ollama", "requires": ["f1.shift"]},
     {"device": "f1", "control": "grid_3", "kind": "press", "action": "script_slot", "slot": "odysseus", "requires": ["f1.shift"]},
     {"device": "f1", "control": "grid_4", "kind": "press", "action": "script_slot", "slot": "custom_01", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_5", "kind": "press", "action": "autocode_open", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_6", "kind": "press", "action": "autocode_status", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_7", "kind": "press", "action": "autocode_pause", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_8", "kind": "press", "action": "autocode_resume", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_9", "kind": "press", "action": "autocode_stop", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_10", "kind": "press", "action": "autocode_cancel", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_11", "kind": "press", "action": "autocode_overnight_stop", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_12", "kind": "press", "action": "autocode_acknowledge", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_13", "kind": "press", "action": "autocode_morning", "requires": ["f1.shift"]},
+    {"device": "f1", "control": "grid_14", "kind": "press", "action": "autocode_cue_test", "requires": ["f1.shift"]},
 
     {"device": "x1", "control": "deck_a_browse_encoder", "kind": "relative", "action": "window_move_horizontal_relative", "sensitivity": 40},
     {"device": "x1", "control": "deck_b_browse_encoder", "kind": "relative", "action": "window_move_vertical_relative", "sensitivity": 40},
@@ -58,6 +79,16 @@
     {"device": "x1", "control": "deck_b_loop_encoder", "kind": "relative", "action": "window_resize_height_relative", "sensitivity": 40},
     {"device": "x1", "control": "fx2_dry_wet", "kind": "absolute", "action": "window_opacity_absolute"},
     {"device": "x1", "control": "fx1_on", "kind": "press", "action": "window_maximize"},
-    {"device": "x1", "control": "fx2_on", "kind": "press", "action": "window_restore"}
+    {"device": "x1", "control": "fx2_on", "kind": "press", "action": "window_restore"},
+    {"device": "x1", "control": "deck_a_in", "kind": "press", "action": "autocode_open", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_a_out", "kind": "press", "action": "autocode_status", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_a_beat_left", "kind": "press", "action": "autocode_pause", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_a_beat_right", "kind": "press", "action": "autocode_resume", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_a_cue", "kind": "press", "action": "autocode_stop", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_a_cup", "kind": "press", "action": "autocode_cancel", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_a_play", "kind": "press", "action": "autocode_overnight_stop", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_a_sync", "kind": "press", "action": "autocode_acknowledge", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_b_in", "kind": "press", "action": "autocode_morning", "requires": ["x1.hotcue"]},
+    {"device": "x1", "control": "deck_b_out", "kind": "press", "action": "autocode_cue_test", "requires": ["x1.hotcue"]}
   ]
 }
