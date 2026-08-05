@@ -89,4 +89,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
             )
         else:
             seen[key] = index
+    from .autocode import validate as validate_autocode
+
+    errors.extend(validate_autocode(config))
     return errors
