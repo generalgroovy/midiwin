@@ -6,6 +6,35 @@ MIDIWIN turns Native Instruments Traktor Kontrol F1 and X1 MK1 hardware into
 Windows control surfaces for media, audio, display brightness, launchers,
 scripts and focused-window movement, resizing and opacity.
 
+## Project at a glance
+
+**Author: Michail Sendetskiy · Python · Windows · hardware integration**
+
+MIDIWIN turns Traktor controller inputs into configurable Windows desktop
+actions. The project combines hardware input, a Tk configuration console,
+display and window controls, and a managed background runtime.
+
+| Component | Purpose |
+| --- | --- |
+| Controller runtime | Maps F1/X1 controls to media, display, launcher, and window actions |
+| Tk console | Shows mappings, highlights input, and provides diagnostics |
+| Windows integration | Handles brightness backends, focused-window actions, and runtime ownership |
+| Installation | Creates launch shortcuts and can build a standalone executable |
+
+**Platform:** this repository targets Windows. The Linux/Sway companion is
+[MIDILIN](https://github.com/generalgroovy/midilin).
+
+Start with the [controller console](#controller-console), inspect the
+[source package](midiwin/), or follow [Run and test](#run-and-test). The
+[X1 driver notes](#x1-driver) explain its WinUSB requirement.
+
+For a first checkout, before the installation steps:
+
+```powershell
+git clone https://github.com/generalgroovy/midiwin.git
+cd midiwin
+```
+
 ## Controller console
 
 The Tk GUI provides:
