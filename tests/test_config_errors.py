@@ -77,3 +77,25 @@ def test_gui_can_save_its_first_default_profile(tmp_path, monkeypatch):
     saved = json.loads((tmp_path / 'config.json').read_text())
     assert saved['display_controls']['brightness']['minimum_percent'] == 5
     gui.reload.assert_called_once()
+
+
+def test_device_diagnostics_work_with_invalid_mappings(tmp_path, monkeypatch, capsys):
+    path = tmp_path / 'invalid.json'
+    path.write_text('{"mappings": null}', encoding='utf-8')
+    devices = Mock(return_value=['F1 example device'])
+    monkeypatch.setattr('midiwin.cli.list_devices', devices)
+    monkeypatch.setattr('sys.argv', ['midiwin', '--config', str(path), '--list-devices'])
+    assert main() == 0
+    devices.assert_called_once()
+    assert 'F1 example device' in capsys.readouterr().out
+
+
+def test_gui_relative_configuration_is_resolved_before_child_launch(tmp_path, monkeypatch):
+    config_text = Path('config.default.json').read_text()
+    path = tmp_path / 'custom.json'
+    path.write_text(config_text, encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(MidiWinGui, '_build', lambda self: None)
+    gui = MidiWinGui(Mock(), Path('custom.json'))
+    assert gui.config_path == path.resolve()
+    assert gui.python_command()[-1] == str(path.resolve())

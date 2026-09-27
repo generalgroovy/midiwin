@@ -153,9 +153,9 @@ class MidiWinGui:
         self.root = root
         self.root.title("MIDIWIN Controller Console")
         self.root.geometry("1180x760")
-        self.config_path = config_path or APP_DIR / "config.json"
-        self.requested_config_path = config_path
-        self.config = load_config(config_path)
+        self.requested_config_path = config_path.resolve() if config_path is not None else None
+        self.config_path = self.requested_config_path or APP_DIR / "config.json"
+        self.config = load_config(self.requested_config_path)
         self.process: subprocess.Popen[str] | None = None
         self.resume_runtime = False
         self.output_queue: queue.Queue[str] = queue.Queue()

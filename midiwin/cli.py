@@ -106,6 +106,12 @@ def main() -> int:
         print(f"MIDIWIN runtime: running PID {process.pid}")
         return 0
 
+    if args.list_devices:
+        devices = list_devices()
+        for item in devices:
+            print(item)
+        return 0 if any(item.startswith(("F1 ", "X1 ")) for item in devices) else 1
+
     try:
         config = load_config(args.config)
     except (OSError, ValueError) as error:
@@ -116,11 +122,6 @@ def main() -> int:
         for error in errors:
             print(f"ERROR: {error}")
         return 1
-    if args.list_devices:
-        devices = list_devices()
-        for item in devices:
-            print(item)
-        return 0 if any(item.startswith(("F1 ", "X1 ")) for item in devices) else 1
     if args.validate_config:
         print(f"Configuration valid: {len(config.get('mappings', []))} mappings")
         return 0
