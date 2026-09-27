@@ -76,14 +76,14 @@ def claim_runtime() -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="midiwin")
-    parser.add_argument("--config", type=Path)
-    parser.add_argument("--list-devices", action="store_true")
-    parser.add_argument("--validate-config", action="store_true")
-    parser.add_argument("--show-layout", action="store_true")
-    parser.add_argument("--monitor", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--gui", action="store_true")
+    parser = argparse.ArgumentParser(prog="midiwin", description="Use Traktor F1/X1 controls on Windows. Run without options to start the controller.")
+    parser.add_argument("--config", type=Path, help="use this JSON configuration")
+    parser.add_argument("--list-devices", action="store_true", help="list detected controllers")
+    parser.add_argument("--validate-config", action="store_true", help="check mappings without running them")
+    parser.add_argument("--show-layout", action="store_true", help="show enabled controls and actions")
+    parser.add_argument("--monitor", action="store_true", help="watch input without applying actions")
+    parser.add_argument("--dry-run", action="store_true", help="preview mapped actions without applying them")
+    parser.add_argument("--gui", action="store_true", help="open the controller console")
     parser.add_argument("--set-brightness", type=int, metavar="PERCENT")
     parser.add_argument("--diagnose-display", action="store_true")
     parser.add_argument("--runtime-status", action="store_true")
@@ -106,18 +106,22 @@ def main() -> int:
         print(f"MIDIWIN runtime: running PID {process.pid}")
         return 0
 
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except (OSError, ValueError) as error:
+        print(f"Configuration error: {error}")
+        return 1
+    errors = validate_config(config)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 1
     if args.list_devices:
         devices = list_devices()
         for item in devices:
             print(item)
         return 0 if any(item.startswith(("F1 ", "X1 ")) for item in devices) else 1
     if args.validate_config:
-        errors = validate_config(config)
-        if errors:
-            for error in errors:
-                print(f"ERROR: {error}")
-            return 1
         print(f"Configuration valid: {len(config.get('mappings', []))} mappings")
         return 0
     if args.show_layout:
@@ -132,11 +136,6 @@ def main() -> int:
                 )
         return 0
 
-    errors = validate_config(config)
-    if errors:
-        for error in errors:
-            print(f"ERROR: {error}")
-        return 1
     dispatcher = ActionDispatcher(config)
     if args.set_brightness is not None:
         return 0 if dispatcher.set_brightness_percent(args.set_brightness) else 1

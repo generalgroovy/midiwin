@@ -1,5 +1,10 @@
 # MIDIWIN — Traktor X1/F1 Windows System Controller
 
+Open `launch-gui.cmd` for the controller console. Start with **Validate config**
+and read-only monitoring before starting the active controller. For command-line
+use, `python -m midiwin --help` explains the available modes. An explicit
+`--config PATH` must exist; invalid JSON and modifier lists report a concise error.
+
 Windows-native sibling of [MIDILIN](https://github.com/generalgroovy/midilin).
 
 MIDIWIN turns Native Instruments Traktor Kontrol F1 and X1 MK1 hardware into

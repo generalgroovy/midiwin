@@ -29,7 +29,7 @@ class ControlEvent:
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
     target = path or APP_DIR / "config.json"
-    if not target.exists():
+    if path is None and not target.exists():
         target = DEFAULT_CONFIG
     value = json.loads(target.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -42,7 +42,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     mappings = config.get("mappings")
     if not isinstance(mappings, list):
         return ["mappings must be an array"]
-    seen: set[tuple[str, str, str, tuple[str, ...]]] = set()
+    seen: set[tuple] = set()
     for index, mapping in enumerate(mappings):
         if not isinstance(mapping, dict):
             errors.append(f"mapping {index} must be an object")
@@ -50,11 +50,22 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         for field in ("device", "control", "kind", "action"):
             if not isinstance(mapping.get(field), str) or not mapping[field]:
                 errors.append(f"mapping {index} missing {field}")
+        valid_modifiers = True
+        for field in ('requires', 'unless'):
+            values = mapping.get(field, [])
+            if not isinstance(values, list) or any(not isinstance(v, str) or not v.strip() for v in values):
+                errors.append(f"mapping {index} {field} must be an array of modifier names")
+                valid_modifiers = False
+        if not valid_modifiers:
+            continue
+        if set(mapping.get('requires', [])) & set(mapping.get('unless', [])):
+            errors.append(f"mapping {index} requires and excludes the same modifier")
         key = (
             str(mapping.get("device", "")),
             str(mapping.get("control", "")),
             str(mapping.get("kind", "")),
             tuple(sorted(str(v) for v in mapping.get("requires", []))),
+            tuple(sorted(set(mapping.get("unless", [])))),
         )
         if key in seen:
             errors.append(f"duplicate mapping: {key}")
