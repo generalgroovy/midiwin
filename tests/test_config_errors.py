@@ -5,6 +5,9 @@ import pytest
 
 from midiwin.cli import main
 from midiwin.common import load_config, validate_config
+from midiwin.gui import MidiWinGui
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 
 @pytest.mark.parametrize('field', ['requires', 'unless'])
@@ -41,3 +44,36 @@ def test_layout_rejects_invalid_modifiers_before_rendering(tmp_path, monkeypatch
     monkeypatch.setattr('sys.argv', ['midiwin', '--config', str(path), '--show-layout'])
     assert main() == 1
     assert 'requires must be an array' in capsys.readouterr().out
+
+
+def test_first_gui_launch_uses_defaults_without_creating_a_profile(tmp_path, monkeypatch):
+    monkeypatch.setattr('midiwin.common.APP_DIR', tmp_path)
+    monkeypatch.setattr('midiwin.gui.APP_DIR', tmp_path)
+    monkeypatch.setattr(MidiWinGui, '_build', lambda self: None)
+    gui = MidiWinGui(Mock())
+    assert validate_config(gui.config) == []
+    assert gui.python_command() == [__import__('sys').executable, '-m', 'midiwin']
+    assert not (tmp_path / 'config.json').exists()
+
+
+def test_gui_custom_config_is_forwarded_to_controller(tmp_path, monkeypatch):
+    path = tmp_path / 'custom.json'
+    path.write_text(Path('config.default.json').read_text(), encoding='utf-8')
+    monkeypatch.setattr(MidiWinGui, '_build', lambda self: None)
+    gui = MidiWinGui(Mock(), path)
+    assert gui.python_command()[-2:] == ['--config', str(path)]
+
+
+def test_gui_can_save_its_first_default_profile(tmp_path, monkeypatch):
+    monkeypatch.setattr('midiwin.common.APP_DIR', tmp_path)
+    monkeypatch.setattr('midiwin.gui.APP_DIR', tmp_path)
+    monkeypatch.setattr(MidiWinGui, '_build', lambda self: None)
+    gui = MidiWinGui(Mock())
+    gui.brightness_display = SimpleNamespace(get=lambda: '')
+    gui.min_brightness = SimpleNamespace(get=lambda: '5')
+    gui.status = Mock()
+    gui.reload = Mock()
+    gui.save_settings()
+    saved = json.loads((tmp_path / 'config.json').read_text())
+    assert saved['display_controls']['brightness']['minimum_percent'] == 5
+    gui.reload.assert_called_once()

@@ -154,7 +154,8 @@ class MidiWinGui:
         self.root.title("MIDIWIN Controller Console")
         self.root.geometry("1180x760")
         self.config_path = config_path or APP_DIR / "config.json"
-        self.config = load_config(self.config_path)
+        self.requested_config_path = config_path
+        self.config = load_config(config_path)
         self.process: subprocess.Popen[str] | None = None
         self.resume_runtime = False
         self.output_queue: queue.Queue[str] = queue.Queue()
@@ -260,7 +261,10 @@ class MidiWinGui:
         self.log.pack(fill="both", expand=True)
 
     def python_command(self) -> list[str]:
-        return [sys.executable, "-m", "midiwin"]
+        command = [sys.executable, "-m", "midiwin"]
+        if self.requested_config_path is not None:
+            command += ["--config", str(self.requested_config_path)]
+        return command
 
     def start_process(self, arguments: list[str]) -> None:
         self.stop_process(resume=False)
@@ -330,11 +334,12 @@ class MidiWinGui:
 
     def save_settings(self) -> None:
         try:
-            raw = json.loads(self.config_path.read_text(encoding="utf-8"))
+            raw = load_config(self.requested_config_path)
             controls = raw.setdefault("display_controls", {}).setdefault("brightness", {})
             value = self.brightness_display.get().strip()
             controls["display"] = int(value) if value.isdigit() else value
             controls["minimum_percent"] = int(self.min_brightness.get())
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
             self.config_path.write_text(json.dumps(raw, indent=2) + "\n", encoding="utf-8")
             self.status.set("Configuration saved")
             self.reload()
@@ -348,7 +353,7 @@ class MidiWinGui:
         self.run_once(["--diagnose-display"])
 
     def reload(self) -> None:
-        self.config = load_config(self.config_path)
+        self.config = load_config(self.requested_config_path)
         errors = validate_config(self.config)
         if errors:
             messagebox.showerror("Invalid configuration", "\n".join(errors))
