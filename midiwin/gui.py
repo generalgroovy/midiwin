@@ -13,6 +13,7 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from .common import APP_DIR, load_config, validate_config
+from .gui_support import execute_command, mapping_rows
 
 EVENT_RE = re.compile(r"device=(\w+) control=([^ ]+).*kind=([^ ]+).*value=(-?\d+)")
 
@@ -35,7 +36,7 @@ class ControllerCanvas(tk.Canvas):
 
     def _add_control(self, device: str, control: str, x1: float, y1: float,
                      x2: float, y2: float, label: str, oval: bool = False) -> None:
-        mapping = _mapping_index(self.config_data).get((device, control), {})
+        mapping = self.mapping_lookup.get((device, control), {})
         action = str(mapping.get("action", "unmapped"))
         fill = "#292d33" if action != "unmapped" else "#202327"
         maker = self.create_oval if oval else self.create_rectangle
@@ -48,6 +49,7 @@ class ControllerCanvas(tk.Canvas):
         self.normal_fill[item] = fill
 
     def redraw(self) -> None:
+        self.mapping_lookup = _mapping_index(self.config_data)
         self.delete("all")
         self.items.clear()
         self.normal_fill.clear()
@@ -158,7 +160,10 @@ class MidiWinGui:
         self.config = load_config(self.requested_config_path)
         self.process: subprocess.Popen[str] | None = None
         self.resume_runtime = False
-        self.output_queue: queue.Queue[str] = queue.Queue()
+        self.output_queue: queue.Queue = queue.Queue()
+        self.detection = "Devices not checked"
+        self.command_serial = 0
+        self.detection_serial = 0
         self._build()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(80, self._drain_output)
@@ -169,6 +174,15 @@ class MidiWinGui:
         ttk.Label(toolbar, text="MIDIWIN", font=("Segoe UI", 16, "bold")).pack(side="left")
         self.status = tk.StringVar(value="Ready")
         ttk.Label(toolbar, textvariable=self.status).pack(side="right")
+        setup = ttk.Frame(self.root, padding=(8, 0, 8, 8))
+        setup.pack(fill="x")
+        self.readiness = tk.StringVar()
+        ttk.Label(setup, textvariable=self.readiness, wraplength=980).pack(anchor="w")
+        steps = ttk.Frame(setup)
+        steps.pack(anchor="w", pady=(5, 0))
+        for label, action in [("1 · Check saved profile", lambda: self.run_once(["--validate-config"])), ("2 · Detect devices", lambda: self.run_once(["--list-devices"])), ("3 · Monitor input", lambda: self.start_process(["--monitor"]))]:
+            ttk.Button(steps, text=label, command=action).pack(side="left", padx=(0, 6))
+        self._refresh_readiness()
         book = ttk.Notebook(self.root)
         book.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         overview = ttk.Frame(book)
@@ -223,31 +237,47 @@ class MidiWinGui:
         self._brightness_job = self.root.after(180, lambda: self.run_once(["--set-brightness", str(value)]))
 
     def _build_mappings(self, parent: ttk.Frame) -> None:
-        columns = ("device", "control", "kind", "action", "layer")
+        search = ttk.Frame(parent)
+        search.pack(fill="x", pady=(0, 6))
+        self.mapping_query = tk.StringVar()
+        self.mapping_state = tk.StringVar(value="All")
+        self.mapping_count = tk.StringVar()
+        ttk.Label(search, text="Find mapping").pack(side="left")
+        ttk.Entry(search, textvariable=self.mapping_query).pack(side="left", fill="x", expand=True, padx=6)
+        ttk.Combobox(search, textvariable=self.mapping_state, values=("All", "Enabled", "Disabled"), state="readonly", width=10).pack(side="left")
+        ttk.Label(search, textvariable=self.mapping_count).pack(side="left", padx=6)
+        columns = ("device", "control", "kind", "action", "layer", "state")
         self.tree = ttk.Treeview(parent, columns=columns, show="headings")
-        widths = (70, 220, 80, 280, 180)
+        widths = (70, 200, 80, 240, 180, 80)
         for name, width in zip(columns, widths):
             self.tree.heading(name, text=name.title())
             self.tree.column(name, width=width, anchor="w")
         self.tree.pack(fill="both", expand=True)
         self._fill_mappings()
+        self.mapping_query.trace_add("write", lambda *_: self._fill_mappings())
+        self.mapping_state.trace_add("write", lambda *_: self._fill_mappings())
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=6)
         ttk.Button(row, text="Reload", command=self.reload).pack(side="left")
         ttk.Button(row, text="Show layout in console", command=lambda: self.run_once(["--show-layout"])).pack(side="left", padx=6)
 
     def _fill_mappings(self) -> None:
+        selected = self.tree.selection()
         for item in self.tree.get_children():
             self.tree.delete(item)
-        for mapping in self.config.get("mappings", []):
-            if not isinstance(mapping, dict):
-                continue
-            layer = ", ".join(mapping.get("requires", []) or mapping.get("unless", []))
-            action = str(mapping.get("action", ""))
-            if mapping.get("slot"):
-                action += f":{mapping['slot']}"
-            self.tree.insert("", "end", values=(mapping.get("device"), mapping.get("control"),
-                                                   mapping.get("kind"), action, layer))
+        rows = mapping_rows(self.config, self.mapping_query.get(), self.mapping_state.get())
+        for key, values in rows:
+            self.tree.insert("", "end", iid=key, values=values)
+        self.mapping_count.set(f"{len(rows)} shown")
+        for key in selected:
+            if self.tree.exists(key):
+                self.tree.selection_add(key)
+
+    def _refresh_readiness(self) -> None:
+        if not hasattr(self, "readiness"):
+            return
+        enabled = sum(bool(m.get("enabled", True)) for m in self.config.get("mappings", []) if isinstance(m, dict))
+        self.readiness.set(f"Loaded profile: {self.config_path} · {enabled} enabled mappings · {self.detection}")
 
     def _build_monitor(self, parent: ttk.Frame) -> None:
         row = ttk.Frame(parent)
@@ -267,45 +297,80 @@ class MidiWinGui:
         return command
 
     def start_process(self, arguments: list[str]) -> None:
+        restore_previous = self.resume_runtime
         self.stop_process(resume=False)
-        status = subprocess.run(
-            self.python_command() + ["--runtime-status"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-        ).returncode == 0
-        if status:
-            subprocess.run(self.python_command() + ["--stop-runtime"], check=False,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.resume_runtime = status and bool(arguments)
+        self.resume_runtime = restore_previous
         command = self.python_command() + arguments
         self._append("$ " + subprocess.list2cmdline(command) + "\n")
-        self.process = subprocess.Popen(command, cwd=Path(__file__).resolve().parents[1],
-                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                        text=True, bufsize=1)
-        threading.Thread(target=self._read_process, daemon=True).start()
+        try:
+            status = subprocess.run(self.python_command() + ["--runtime-status"], stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, check=False, timeout=5).returncode == 0
+            if status:
+                subprocess.run(self.python_command() + ["--stop-runtime"], check=True, timeout=5,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.resume_runtime = (status or restore_previous) and bool(arguments)
+            process = subprocess.Popen(command, cwd=Path(__file__).resolve().parents[1],
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, bufsize=1)
+        except (OSError, subprocess.SubprocessError) as error:
+            self.status.set("Could not start; use Stop to restore runtime" if self.resume_runtime else "Could not start; see Monitoring")
+            self._append(f"Could not start: {error}\n")
+            return
+        self.process = process
+        threading.Thread(target=self._read_process, args=(process,), daemon=True).start()
         self.status.set("Running " + (" ".join(arguments) or "active runtime"))
 
     def run_once(self, arguments: list[str]) -> None:
         command = self.python_command() + arguments
+        self.command_serial += 1
+        token = self.command_serial
+        if "--list-devices" in arguments:
+            self.detection_serial = token
+        self.status.set("Checking…")
         def worker() -> None:
-            result = subprocess.run(command, text=True, capture_output=True, check=False)
-            self.output_queue.put("$ " + subprocess.list2cmdline(command) + "\n")
-            self.output_queue.put((result.stdout or "") + (result.stderr or ""))
+            code, output = execute_command(command)
+            self.output_queue.put(("command", token, arguments, code, "$ " + subprocess.list2cmdline(command) + "\n" + output))
         threading.Thread(target=worker, daemon=True).start()
 
-    def _read_process(self) -> None:
-        assert self.process and self.process.stdout
-        for line in self.process.stdout:
-            self.output_queue.put(line)
-        self.output_queue.put("[process stopped]\n")
+    def _read_process(self, process: subprocess.Popen[str]) -> None:
+        try:
+            if process.stdout:
+                for line in process.stdout:
+                    self.output_queue.put(("line", process, line))
+            code = process.wait()
+        except (OSError, ValueError) as error:
+            self.output_queue.put(("line", process, f"Read error: {error}\n"))
+            code = -1
+        self.output_queue.put(("stopped", process, code))
+
+    def _handle_output(self, item: tuple) -> None:
+        if item[0] == "command":
+            _, token, arguments, code, text = item
+            self._append(text)
+            self._append(f"[exit {code if code is not None else 'unavailable'}]\n")
+            if "--list-devices" in arguments and token == self.detection_serial:
+                self.detection = "Devices detected" if code == 0 else "Device check failed; see Monitoring"
+                self._refresh_readiness()
+            if token == self.command_serial:
+                self.status.set("Check completed" if code == 0 else "Check failed; see Monitoring")
+            return
+        _, process, value = item
+        if process is not self.process:
+            return
+        if item[0] == "stopped":
+            self.process = None
+            self.status.set(f"Process stopped (exit {value})")
+            self._append(f"[process stopped: exit {value}]\n")
+            return
+        self._append(value)
+        match = EVENT_RE.search(value)
+        if match:
+            self.canvas.flash(match.group(1), match.group(2))
 
     def _drain_output(self) -> None:
         try:
-            while True:
-                line = self.output_queue.get_nowait()
-                self._append(line)
-                match = EVENT_RE.search(line)
-                if match:
-                    self.canvas.flash(match.group(1), match.group(2))
+            for _ in range(200):
+                self._handle_output(self.output_queue.get_nowait())
         except queue.Empty:
             pass
         self.root.after(80, self._drain_output)
@@ -313,6 +378,8 @@ class MidiWinGui:
     def _append(self, text: str) -> None:
         self.log.configure(state="normal")
         self.log.insert("end", text)
+        if int(self.log.index("end-1c").split(".")[0]) > 2000:
+            self.log.delete("1.0", "end-2000l")
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -326,9 +393,14 @@ class MidiWinGui:
         self.process = None
         if resume and self.resume_runtime:
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            subprocess.Popen(self.python_command(), cwd=Path(__file__).resolve().parents[1],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             stdin=subprocess.DEVNULL, creationflags=creationflags)
+            try:
+                subprocess.Popen(self.python_command(), cwd=Path(__file__).resolve().parents[1],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 stdin=subprocess.DEVNULL, creationflags=creationflags)
+            except OSError as error:
+                self._append(f"Could not restore runtime: {error}\n")
+                self.status.set("Could not restore runtime; retry Stop")
+                return
         self.resume_runtime = False
         self.status.set("Stopped")
 
@@ -384,6 +456,7 @@ class MidiWinGui:
         self.canvas.config_data = self.config
         self.canvas.redraw()
         self._fill_mappings()
+        self._refresh_readiness()
         self.status.set("Configuration reloaded")
         return True
 

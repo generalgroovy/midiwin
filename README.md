@@ -20,6 +20,14 @@ Use `-ResetConfig` only when you want to replace your mappings with the shipped 
 
 The F1 uses its HID driver. X1 raw USB access requires WinUSB; the separate `setup-x1-winusb.ps1` documents the guarded Zadig workflow. Ordinary setup and testing do not require changing drivers.
 
+## Check and find controls
+
+The setup strip shows the loaded profile, enabled mapping count and last device-check result. Follow **Check saved profile → Detect devices → Monitor input**. Device detection is a point-in-time result; the monitor confirms subsequent input. Active runtime/service and display-test controls remain explicit.
+
+In **Mappings**, search by device, control, action, layer or state; filter Enabled/Disabled. Layer text distinguishes `requires` from `unless`. No matching rows reports **0 shown**; clearing the search restores the list. Search does not edit the profile.
+
+One-off diagnostics report their exit code, time out after 20 seconds, and put details in Monitoring. Monitor startup service checks time out after 5 seconds. The log retains the latest 2,000 lines; restarting monitoring discards late output from the old child.
+
 ## First session
 
 1. Open **Mappings** to inspect which controls perform which actions.
