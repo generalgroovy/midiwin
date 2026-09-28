@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,18 @@ from midiwin.common import load_config, validate_config
 from midiwin.gui import MidiWinGui
 from types import SimpleNamespace
 from unittest.mock import Mock
+from midiwin import gui as gui_module
+
+
+def test_cli_display_dry_run_never_changes_brightness(monkeypatch):
+    brightness = Mock()
+    monkeypatch.setitem(sys.modules, 'screen_brightness_control', brightness)
+    process = Mock()
+    monkeypatch.setattr('midiwin.actions.subprocess.run', process)
+    monkeypatch.setattr('sys.argv', ['midiwin', '--config', 'config.default.json', '--dry-run', '--set-brightness', '50'])
+    assert main() == 0
+    brightness.set_brightness.assert_not_called()
+    process.assert_not_called()
 
 
 @pytest.mark.parametrize('field', ['requires', 'unless'])
@@ -99,3 +112,38 @@ def test_gui_relative_configuration_is_resolved_before_child_launch(tmp_path, mo
     gui = MidiWinGui(Mock(), Path('custom.json'))
     assert gui.config_path == path.resolve()
     assert gui.python_command()[-1] == str(path.resolve())
+
+
+def test_cli_passes_custom_config_to_gui(monkeypatch):
+    launch = Mock(return_value=0)
+    monkeypatch.setattr(gui_module, 'main', launch)
+    monkeypatch.setattr('sys.argv', ['midiwin', '--gui', '--config', 'custom.json'])
+    assert main() == 0
+    launch.assert_called_once_with(config_path=Path('custom.json'))
+
+
+def test_gui_invalid_config_fails_before_opening_window(tmp_path, monkeypatch, capsys):
+    path = tmp_path / 'invalid.json'
+    path.write_text('{"mappings":null}', encoding='utf-8')
+    window = Mock()
+    monkeypatch.setattr(gui_module.tk, 'Tk', window)
+    assert gui_module.main(path) == 1
+    window.assert_not_called()
+    assert 'mappings must be an array' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('contents', ['{bad', '{"mappings": null}'])
+def test_failed_reload_preserves_working_gui_config(tmp_path, monkeypatch, contents):
+    path = tmp_path / 'custom.json'
+    path.write_text(Path('config.default.json').read_text(), encoding='utf-8')
+    monkeypatch.setattr(MidiWinGui, '_build', lambda self: None)
+    gui = MidiWinGui(Mock(), path)
+    original = gui.config
+    gui.canvas = Mock()
+    error = Mock()
+    monkeypatch.setattr(gui_module.messagebox, 'showerror', error)
+    path.write_text(contents, encoding='utf-8')
+    gui.reload()
+    assert gui.config is original
+    gui.canvas.redraw.assert_not_called()
+    error.assert_called_once()

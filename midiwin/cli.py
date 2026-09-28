@@ -95,7 +95,7 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.gui:
         from .gui import main as gui_main
-        return gui_main()
+        return gui_main(config_path=args.config)
     if args.stop_runtime:
         return 0 if stop_runtime() else 1
     if args.runtime_status:
@@ -137,7 +137,7 @@ def main() -> int:
                 )
         return 0
 
-    dispatcher = ActionDispatcher(config)
+    dispatcher = ActionDispatcher(config, dry_run=args.dry_run)
     if args.set_brightness is not None:
         return 0 if dispatcher.set_brightness_percent(args.set_brightness) else 1
     if args.diagnose_display:

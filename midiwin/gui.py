@@ -353,11 +353,15 @@ class MidiWinGui:
         self.run_once(["--diagnose-display"])
 
     def reload(self) -> None:
-        self.config = load_config(self.requested_config_path)
-        errors = validate_config(self.config)
-        if errors:
-            messagebox.showerror("Invalid configuration", "\n".join(errors))
+        try:
+            candidate = load_config(self.requested_config_path)
+            errors = validate_config(candidate)
+            if errors:
+                raise ValueError("\n".join(errors))
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Invalid configuration", str(error))
             return
+        self.config = candidate
         self.canvas.config_data = self.config
         self.canvas.redraw()
         self._fill_mappings()
@@ -368,13 +372,21 @@ class MidiWinGui:
         self.root.destroy()
 
 
-def main() -> int:
+def main(config_path: Path | None = None) -> int:
+    try:
+        config = load_config(config_path)
+        errors = validate_config(config)
+        if errors:
+            raise ValueError("\n".join(errors))
+    except (OSError, ValueError) as error:
+        print(f"Configuration error: {error}", file=sys.stderr)
+        return 1
     root = tk.Tk()
     try:
         ttk.Style(root).theme_use("vista")
     except tk.TclError:
         pass
-    MidiWinGui(root)
+    MidiWinGui(root, config_path)
     root.mainloop()
     return 0
 
