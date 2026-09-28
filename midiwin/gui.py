@@ -334,38 +334,58 @@ class MidiWinGui:
 
     def save_settings(self) -> None:
         try:
+            minimum = int(self.min_brightness.get())
+            if not 0 <= minimum <= 100:
+                raise ValueError("Minimum brightness must be between 0 and 100%.")
             raw = load_config(self.requested_config_path)
             controls = raw.setdefault("display_controls", {}).setdefault("brightness", {})
             value = self.brightness_display.get().strip()
             controls["display"] = int(value) if value.isdigit() else value
-            controls["minimum_percent"] = int(self.min_brightness.get())
+            controls["minimum_percent"] = minimum
+            errors = validate_config(raw)
+            if errors:
+                raise ValueError("\n".join(errors))
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
             self.config_path.write_text(json.dumps(raw, indent=2) + "\n", encoding="utf-8")
-            self.status.set("Configuration saved")
-            self.reload()
+            if self.reload():
+                self.status.set("Configuration saved")
         except Exception as exc:
             messagebox.showerror("MIDIWIN", str(exc))
 
     def open_config(self) -> None:
-        os.startfile(self.config_path)
+        if not self.config_path.exists():
+            messagebox.showinfo("MIDIWIN", "Save configuration first to create your profile.")
+            return
+        try:
+            os.startfile(self.config_path)
+        except OSError as error:
+            messagebox.showerror("Could not open configuration", str(error))
 
     def diagnose_displays(self) -> None:
         self.run_once(["--diagnose-display"])
 
-    def reload(self) -> None:
+    def reload(self) -> bool:
         try:
             candidate = load_config(self.requested_config_path)
             errors = validate_config(candidate)
             if errors:
                 raise ValueError("\n".join(errors))
-        except (OSError, ValueError) as error:
+            display = candidate.get("display_controls", {}).get("brightness", {})
+            minimum = int(display.get("minimum_percent", 1))
+            if not 0 <= minimum <= 100:
+                raise ValueError("Minimum brightness must be between 0 and 100%.")
+        except (OSError, ValueError, TypeError, AttributeError) as error:
             messagebox.showerror("Invalid configuration", str(error))
-            return
+            return False
         self.config = candidate
+        selected_display = display.get("display", "")
+        self.brightness_display.set("" if selected_display is None else str(selected_display))
+        self.min_brightness.set(minimum)
         self.canvas.config_data = self.config
         self.canvas.redraw()
         self._fill_mappings()
         self.status.set("Configuration reloaded")
+        return True
 
     def close(self) -> None:
         self.stop_process()

@@ -31,9 +31,11 @@ Starting a monitor temporarily stops an existing background runtime. Stopping th
 
 ## Configuration and recovery
 
-The default profile is `%APPDATA%\MidiWin\config.json`. On first launch without a profile, the shipped `config.default.json` is read without creating a file. **Save configuration** creates the profile. Save before using **Open config** on a fresh setup.
+The default profile is `%APPDATA%\MidiWin\config.json`. On first launch without a profile, the shipped `config.default.json` is read without creating a file. **Save configuration** creates the profile. **Open config** explains when the profile needs its first save.
 
 Copy the profile before editing it. Restore a chosen backup to `config.json` while the runtime is stopped, then validate and restart. Invalid JSON or mappings produce an error; a failed GUI reload keeps the last working configuration visible.
+
+**Reload** refreshes the editable display fields as well as the mappings. Save rejects brightness minimums outside 0–100% without writing the profile, and the status confirms a successful save.
 
 Choose a custom profile through the main entry point:
 
