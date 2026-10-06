@@ -34,6 +34,10 @@ The setup strip shows the loaded profile, enabled mapping count and last device-
 
 In **Mappings**, search by device, control, action, layer or state; filter Enabled/Disabled. Layer text distinguishes `requires` from `unless`. No matching rows reports **0 shown**; clearing the search restores the list. Search does not edit the profile.
 
+Select a row and choose **Inspect / try event** (or press Enter). The inspector shows the complete mapping, referenced script/model definition where present, and an offline routing rehearsal. Choose an event and enter held controls such as `f1.shift`; **Try event** explains which mappings are eligible and why others are blocked. Multiple eligible mappings are shown in configuration order. Search also finds numeric parameters and profile fields; the table scrolls in both directions.
+
+The inspector uses a snapshot of the loaded profile. Reopen it after reloading to inspect new configuration. It never opens controllers or runs mapped commands; it does not simulate action values, throttling, timing or hardware response. Windows tracks qualified `shift` / `hotcue` modifiers only; releases clear those modifiers before routing.
+
 One-off diagnostics report their exit code, time out after 20 seconds, and put details in Monitoring. Monitor startup service checks time out after 5 seconds. The log retains the latest 2,000 lines; restarting monitoring discards late output from the old child.
 
 ## First session
@@ -46,6 +50,9 @@ One-off diagnostics report their exit code, time out after 20 seconds, and put d
 Starting a monitor temporarily stops an existing background runtime. Stopping the monitor, or closing the console, resumes that runtime if it was previously active. Use `--stop-runtime` below when you intend to leave all control stopped.
 
 ## Configuration and recovery
+
+Unsaved display changes are marked in the settings tab. Reload and close offer **Save / Discard / Cancel**; Cancel keeps both the draft and the current monitor. An invalid or failed save keeps the console open. Saving replaces a fully written profile atomically and preserves configuration fields outside the editor.
+
 
 The default profile is `%APPDATA%\MidiWin\config.json`. On first launch without a profile, the shipped `config.default.json` is read without creating a file. **Save configuration** creates the profile. **Open config** explains when the profile needs its first save.
 

@@ -20,6 +20,15 @@ jobs:
       - run: python -m compileall -q midiwin midiwin-gui.py
       - run: python -m midiwin --validate-config --config config.default.json
       - run: python -m pytest -v
+      - run: python -m pip install pillow
+      - name: Exercise real Tk workflow without hardware
+        run: python tests/tk_workflow.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MIDIWIN-tk-quality
+          path: artifacts/tk-quality
+          if-no-files-found: warn
       - name: Build executable
         shell: powershell
         run: |

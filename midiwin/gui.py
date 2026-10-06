@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import queue
 import re
@@ -13,7 +12,8 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from .common import APP_DIR, load_config, validate_config
-from .gui_support import execute_command, mapping_rows
+from .gui_support import execute_command, mapping_rows, save_profile
+from .mapping_inspector import MappingInspector
 
 EVENT_RE = re.compile(r"device=(\w+) control=([^ ]+).*kind=([^ ]+).*value=(-?\d+)")
 
@@ -198,6 +198,7 @@ class MidiWinGui:
         self._build_settings(settings)
         self._build_mappings(mappings)
         self._build_monitor(monitor)
+        self.track_settings()
 
     def _build_settings(self, parent: ttk.Frame) -> None:
         display = self.config.setdefault("display_controls", {}).setdefault("brightness", {})
@@ -226,6 +227,8 @@ class MidiWinGui:
         self.brightness_label.grid(row=6, column=2, padx=8)
         ttk.Button(parent, text="Diagnose displays", command=self.diagnose_displays).grid(
             row=7, column=0, sticky="w")
+        self.draft_status = tk.StringVar(value="No unsaved display changes")
+        ttk.Label(parent, textvariable=self.draft_status).grid(row=8, column=0, columnspan=3, sticky="w", pady=8)
         parent.columnconfigure(1, weight=1)
         self._brightness_job: str | None = None
 
@@ -247,17 +250,22 @@ class MidiWinGui:
         ttk.Combobox(search, textvariable=self.mapping_state, values=("All", "Enabled", "Disabled"), state="readonly", width=10).pack(side="left")
         ttk.Label(search, textvariable=self.mapping_count).pack(side="left", padx=6)
         columns = ("device", "control", "kind", "action", "layer", "state")
-        self.tree = ttk.Treeview(parent, columns=columns, show="headings")
+        table = ttk.Frame(parent)
+        table.pack(fill="both", expand=True)
+        self.tree = ttk.Treeview(table, columns=columns, show="headings", selectmode="browse")
         widths = (70, 200, 80, 240, 180, 80)
         for name, width in zip(columns, widths):
             self.tree.heading(name, text=name.title())
             self.tree.column(name, width=width, anchor="w")
-        self.tree.pack(fill="both", expand=True)
+        self.mapping_scrollbars(table)
+        self.tree.bind("<Double-1>", lambda _event: self.inspect_mapping())
+        self.tree.bind("<Return>", lambda _event: self.inspect_mapping())
         self._fill_mappings()
         self.mapping_query.trace_add("write", lambda *_: self._fill_mappings())
         self.mapping_state.trace_add("write", lambda *_: self._fill_mappings())
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=6)
+        ttk.Button(row, text="Inspect / try event", command=self.inspect_mapping).pack(side="left", padx=(0, 6))
         ttk.Button(row, text="Reload", command=self.reload).pack(side="left")
         ttk.Button(row, text="Show layout in console", command=lambda: self.run_once(["--show-layout"])).pack(side="left", padx=6)
 
@@ -404,7 +412,7 @@ class MidiWinGui:
         self.resume_runtime = False
         self.status.set("Stopped")
 
-    def save_settings(self) -> None:
+    def save_settings(self) -> bool:
         try:
             minimum = int(self.min_brightness.get())
             if not 0 <= minimum <= 100:
@@ -417,12 +425,13 @@ class MidiWinGui:
             errors = validate_config(raw)
             if errors:
                 raise ValueError("\n".join(errors))
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            self.config_path.write_text(json.dumps(raw, indent=2) + "\n", encoding="utf-8")
-            if self.reload():
+            save_profile(self.config_path, raw)
+            if self.reload(confirm=False):
                 self.status.set("Configuration saved")
+                return True
         except Exception as exc:
             messagebox.showerror("MIDIWIN", str(exc))
+        return False
 
     def open_config(self) -> None:
         if not self.config_path.exists():
@@ -436,7 +445,9 @@ class MidiWinGui:
     def diagnose_displays(self) -> None:
         self.run_once(["--diagnose-display"])
 
-    def reload(self) -> bool:
+    def reload(self, confirm: bool = True) -> bool:
+        if confirm and not self.confirm_settings("reloading"):
+            return False
         try:
             candidate = load_config(self.requested_config_path)
             errors = validate_config(candidate)
@@ -458,11 +469,65 @@ class MidiWinGui:
         self._fill_mappings()
         self._refresh_readiness()
         self.status.set("Configuration reloaded")
+        self.remember_settings()
         return True
 
+    def mapping_scrollbars(self, table: ttk.Frame) -> None:
+        table.rowconfigure(0, weight=1)
+        table.columnconfigure(0, weight=1)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vertical = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
+        horizontal = ttk.Scrollbar(table, orient="horizontal", command=self.tree.xview)
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
+        self.tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+
+    def inspect_mapping(self) -> None:
+        selected = self.tree.selection()
+        if not selected:
+            self.status.set("Select a mapping, then Inspect / try event")
+            self.tree.focus_set()
+            return
+        previous = getattr(self, "inspector", None)
+        if previous is not None and previous.winfo_exists():
+            previous.destroy()
+        self.inspector = MappingInspector(self.root, self.config, int(selected[0]))
+
+    def settings_snapshot(self) -> tuple[str, ...]:
+        values = []
+        for name in ("brightness_display", "min_brightness"):
+            try:
+                values.append(str(getattr(self, name).get()))
+            except (tk.TclError, ValueError):
+                values.append("<invalid>")
+        return tuple(values)
+
+    def track_settings(self) -> None:
+        self.remember_settings()
+        for name in ("brightness_display", "min_brightness"):
+            getattr(self, name).trace_add("write", lambda *_: self.update_draft_status())
+
+    def remember_settings(self) -> None:
+        self.settings_baseline = self.settings_snapshot()
+        self.update_draft_status()
+
+    def update_draft_status(self) -> None:
+        if hasattr(self, "draft_status"):
+            dirty = self.settings_snapshot() != self.settings_baseline
+            self.draft_status.set("Unsaved display changes" if dirty else "No unsaved display changes")
+
+    def confirm_settings(self, action: str) -> bool:
+        if not hasattr(self, "settings_baseline") or self.settings_snapshot() == self.settings_baseline:
+            return True
+        choice = messagebox.askyesnocancel("Unsaved display changes", f"Save your display changes before {action}?\nYes: save. No: discard. Cancel: keep editing.", parent=self.root)
+        if choice is None:
+            return False
+        return self.save_settings() if choice else True
+
     def close(self) -> None:
-        self.stop_process()
-        self.root.destroy()
+        if self.confirm_settings("closing"):
+            self.stop_process()
+            self.root.destroy()
 
 
 def main(config_path: Path | None = None) -> int:

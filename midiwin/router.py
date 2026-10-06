@@ -4,6 +4,7 @@ from typing import Any
 
 from .actions import ActionDispatcher
 from .common import ControlEvent
+from .mapping_rules import layer_reasons, update_modifiers
 
 
 class EventRouter:
@@ -26,12 +27,7 @@ class EventRouter:
                 flush=True,
             )
 
-        modifier = self._modifier_name(event)
-        if modifier:
-            if event.kind == "press":
-                self.modifiers.add(modifier)
-            elif event.kind == "release":
-                self.modifiers.discard(modifier)
+        update_modifiers(self.modifiers, event.device, event.control, event.kind)
 
         for mapping in self.config.get("mappings", []):
             if not mapping.get("enabled", True):
@@ -42,8 +38,6 @@ class EventRouter:
                 continue
             if mapping.get("kind") != event.kind:
                 continue
-            required = set(mapping.get("requires", []))
-            excluded = set(mapping.get("unless", []))
-            if not required.issubset(self.modifiers) or excluded.intersection(self.modifiers):
+            if layer_reasons(mapping, self.modifiers):
                 continue
             self.dispatcher.dispatch(mapping, event)
