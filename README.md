@@ -30,22 +30,24 @@ The F1 uses its HID driver. X1 raw USB access requires WinUSB; the separate `set
 
 ## Check and find controls
 
-The setup strip shows the loaded profile, enabled mapping count and last device-check result. Follow **Check saved profile → Detect devices → Monitor input**. Device detection is a point-in-time result; the monitor confirms subsequent input. Active runtime/service and display-test controls remain explicit.
+The console opens on **Mappings**, ready to explore without hardware. The setup strip shows the profile name, enabled mapping count and last device check. Its next-action button guides **Check saved profile → Detect devices → Monitor input**, with failures kept retryable. The full profile path is in **Display settings**.
 
-In **Mappings**, search by device, control, action, layer or state; filter Enabled/Disabled. Layer text distinguishes `requires` from `unless`. No matching rows reports **0 shown**; clearing the search restores the list. Search does not edit the profile.
+Search by device, control, action, layer or state; filter Enabled/Disabled. **Clear filters** resets both the search and state filter and returns focus to search. No matches explains how to recover. Search does not edit the profile.
+
+**Monitor & runtime** separates inspection (mapped actions off) from controls that apply mappings to your desktop. Its persistent process line stays separate from one-off diagnostic feedback. “Device check complete” means the command finished: review its list, then monitor actual input. It does not mean a controller was found or tested. Background state is not assumed at startup.
 
 Select a row and choose **Inspect / try event** (or press Enter). The inspector shows readable field labels (**Show JSON** exposes exact configuration syntax), the complete mapping, referenced script/model definition where present, and an offline routing rehearsal. Choose an event and enter held controls such as `f1.shift`; **Try event** explains which mappings are eligible and why others are blocked. Multiple eligible mappings are shown in configuration order. Search also finds numeric parameters and profile fields; the table scrolls in both directions.
 
 The inspector uses a snapshot of the loaded profile. Reopen it after reloading to inspect new configuration. It never opens controllers or runs mapped commands; it does not simulate action values, throttling, timing or hardware response. Windows tracks qualified `shift` / `hotcue` modifiers only; releases clear those modifiers before routing.
 
-One-off diagnostics report their exit code, time out after 20 seconds, and put details in Monitoring. Monitor startup service checks time out after 5 seconds. The log retains the latest 2,000 lines; restarting monitoring discards late output from the old child.
+One-off diagnostics report their exit code, time out after 20 seconds, and put details in Monitor & runtime. Monitor startup service checks time out after 5 seconds. The log retains the latest 2,000 lines; restarting monitoring discards late output from the old child.
 
 ## First session
 
 1. Open **Mappings** to inspect which controls perform which actions.
-2. In **Monitoring**, use **Detect devices**, then **Read-only monitor** or **Dry-run mappings** to inspect input and planned actions.
+2. In **Monitor & runtime**, use **Detect devices**, then **Read-only monitor** or **Dry-run mappings** to inspect input and planned actions.
 3. Use **Start active runtime** when ready to apply mappings. **Stop** ends the console-owned process. The runtime PID lock prevents two controller runtimes from running concurrently.
-4. In **Configuration**, select the display and minimum brightness, then **Save configuration**. The brightness slider is a live test, not a preview.
+4. In **Display settings**, select the display and minimum brightness, then **Save configuration**. The brightness slider is a live test, not a preview.
 
 Starting a monitor temporarily stops an existing background runtime. Stopping the monitor, or closing the console, resumes that runtime if it was previously active. Use `--stop-runtime` below when you intend to leave all control stopped.
 

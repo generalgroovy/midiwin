@@ -49,10 +49,10 @@ def test_old_detection_cannot_replace_new_success_and_unrelated_check_keeps_dete
     view.command_serial = 3; view.detection_serial = 2; view.status = Mock(); view._append = Mock(); view._refresh_readiness = Mock()
     view._handle_output(("command", 2, ["--list-devices"], 0, "F1 controller"))
     view._handle_output(("command", 1, ["--list-devices"], 1, "No device"))
-    assert view.detection == "Devices detected"
+    assert view.detection == "Device check complete"
     view.status.set.assert_not_called()
     view._handle_output(("command", 3, ["--validate-config"], 0, "Valid"))
-    assert view.detection == "Devices detected"
+    assert view.detection == "Device check complete"
     view.status.set.assert_called_with("Check completed")
 
 

@@ -55,6 +55,7 @@ class ControllerCanvas(tk.Canvas):
         self.normal_fill.clear()
         w = max(self.winfo_width(), 900)
         h = max(self.winfo_height(), 560)
+        self.configure(scrollregion=(0, 0, w, h))
         margin = 24
         gap = 28
         left_w = (w - margin * 2 - gap) * 0.55
@@ -174,33 +175,94 @@ class MidiWinGui:
         ttk.Label(toolbar, text="MIDIWIN", font=("Segoe UI", 16, "bold")).pack(side="left")
         self.status = tk.StringVar(value="Ready")
         ttk.Label(toolbar, textvariable=self.status).pack(side="right")
+        self.root.minsize(860, 620)
+        self.profile_check = "unchecked"
+        self.validation_serial = 0
         setup = ttk.Frame(self.root, padding=(8, 0, 8, 8))
         setup.pack(fill="x")
         self.readiness = tk.StringVar()
-        ttk.Label(setup, textvariable=self.readiness, wraplength=980).pack(anchor="w")
+        self.readiness_label = ttk.Label(setup, textvariable=self.readiness, wraplength=820)
+        self.readiness_label.pack(anchor="w")
+        self.next_hint = tk.StringVar()
+        ttk.Label(setup, textvariable=self.next_hint, wraplength=820).pack(anchor="w", pady=(4, 0))
         steps = ttk.Frame(setup)
         steps.pack(anchor="w", pady=(5, 0))
-        for label, action in [("1 · Check saved profile", lambda: self.run_once(["--validate-config"])), ("2 · Detect devices", lambda: self.run_once(["--list-devices"])), ("3 · Monitor input", lambda: self.start_process(["--monitor"]))]:
-            ttk.Button(steps, text=label, command=action).pack(side="left", padx=(0, 6))
-        self._refresh_readiness()
-        book = ttk.Notebook(self.root)
-        book.pack(fill="both", expand=True, padx=8, pady=(0, 8))
-        overview = ttk.Frame(book)
-        settings = ttk.Frame(book, padding=12)
-        mappings = ttk.Frame(book, padding=8)
-        monitor = ttk.Frame(book, padding=8)
-        book.add(overview, text="Controller layout")
-        book.add(settings, text="Configuration")
-        book.add(mappings, text="Mappings")
-        book.add(monitor, text="Monitoring")
-        self.canvas = ControllerCanvas(overview, self.config)
-        self.canvas.pack(fill="both", expand=True)
-        self._build_settings(settings)
-        self._build_mappings(mappings)
-        self._build_monitor(monitor)
+        self.next_button = ttk.Button(steps, command=self.take_next_step)
+        self.next_button.pack(side="left", padx=(0, 6))
+        ttk.Button(steps, text="Explore mappings", command=lambda: self.show_tab("mappings")).pack(side="left", padx=(0, 6))
+        ttk.Button(steps, text="Monitor & runtime", command=lambda: self.show_tab("monitor")).pack(side="left")
+        self.book = ttk.Notebook(self.root)
+        self.book.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.tabs = {name: ttk.Frame(self.book, padding=8) for name in ("mappings", "layout", "settings", "monitor")}
+        for name, label in (("mappings", "Mappings"), ("layout", "Controller layout"), ("settings", "Display settings"), ("monitor", "Monitor & runtime")):
+            self.book.add(self.tabs[name], text=label)
+        self.canvas = ControllerCanvas(self.tabs["layout"], self.config)
+        self.build_layout(self.tabs["layout"])
+        self._build_settings(self.tabs["settings"])
+        self._build_mappings(self.tabs["mappings"])
+        self._build_monitor(self.tabs["monitor"])
         self.track_settings()
+        self._refresh_readiness()
+
+
+    def build_layout(self, parent: ttk.Frame) -> None:
+        parent.rowconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        horizontal = ttk.Scrollbar(parent, orient="horizontal", command=self.canvas.xview)
+        vertical = ttk.Scrollbar(parent, command=self.canvas.yview)
+        horizontal.grid(row=1, column=0, sticky="ew")
+        vertical.grid(row=0, column=1, sticky="ns")
+        self.canvas.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
+
+    def show_tab(self, name: str) -> None:
+        if not hasattr(self, "book"):
+            return
+        self.book.select(self.tabs[name])
+        (self.mapping_search if name == "mappings" else self.detect_button).focus_set()
+
+    def clear_mapping_filters(self) -> None:
+        self.mapping_query.set("")
+        self.mapping_state.set("All")
+        self.mapping_search.focus_set()
+
+    def update_mapping_action(self) -> None:
+        if hasattr(self, "inspect_button"):
+            self.inspect_button.configure(state="normal" if self.tree.selection() else "disabled")
+
+    def refresh_next_action(self) -> None:
+        if not hasattr(self, "next_button"):
+            return
+        check = getattr(self, "profile_check", "unchecked")
+        if check == "checking":
+            label, hint, state = "Checking profile…", "Checking the saved file. Your unsaved display draft stays here.", "disabled"
+        elif check != "valid":
+            label, hint, state = "Check saved profile", "Start here: check the saved profile, or explore mappings without a device.", "normal"
+            if check == "failed":
+                hint = "Profile needs attention. See Monitor & runtime for details, fix the file, then check again."
+        elif self.detection == "Checking devices…":
+            label, hint, state = "Detecting devices…", "Looking for controllers. Results appear in Monitor & runtime.", "disabled"
+        elif self.detection != "Device check complete":
+            label, hint, state = "Detect devices", "Profile checked. Connect a controller, then detect devices.", "normal"
+        else:
+            label, hint, state = "Monitor input", "Review the device list, then monitor input to see incoming controls.", "normal"
+        self.next_button.configure(text=label, state=state)
+        self.next_hint.set(hint)
+
+    def take_next_step(self) -> None:
+        if self.profile_check != "valid":
+            self.run_once(["--validate-config"])
+        elif self.detection != "Device check complete":
+            self.run_once(["--list-devices"])
+        else:
+            self.start_process(["--monitor"])
+
+    def set_session_status(self, text: str) -> None:
+        if hasattr(self, "session_status"):
+            self.session_status.set(text)
 
     def _build_settings(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text=f"Profile: {self.config_path}", wraplength=780).grid(row=9, column=0, columnspan=3, sticky="w", pady=8)
         display = self.config.setdefault("display_controls", {}).setdefault("brightness", {})
         self.brightness_display = tk.StringVar(value=str(display.get("display", "")))
         self.min_brightness = tk.IntVar(value=int(display.get("minimum_percent", 1)))
@@ -246,9 +308,14 @@ class MidiWinGui:
         self.mapping_state = tk.StringVar(value="All")
         self.mapping_count = tk.StringVar()
         ttk.Label(search, text="Find mapping").pack(side="left")
-        ttk.Entry(search, textvariable=self.mapping_query).pack(side="left", fill="x", expand=True, padx=6)
+        self.mapping_search = ttk.Entry(search, textvariable=self.mapping_query)
+        self.mapping_search.pack(side="left", fill="x", expand=True, padx=6)
+        self.clear_search_button = ttk.Button(search, text="Clear filters", command=self.clear_mapping_filters)
+        self.clear_search_button.pack(side="left", padx=(0, 6))
         ttk.Combobox(search, textvariable=self.mapping_state, values=("All", "Enabled", "Disabled"), state="readonly", width=10).pack(side="left")
         ttk.Label(search, textvariable=self.mapping_count).pack(side="left", padx=6)
+        self.mapping_hint = tk.StringVar(value="Select a mapping to rehearse it. No device or desktop action is needed.")
+        ttk.Label(parent, textvariable=self.mapping_hint, wraplength=800).pack(anchor="w", pady=(0, 6))
         columns = ("device", "control", "kind", "action", "layer", "state")
         table = ttk.Frame(parent)
         table.pack(fill="both", expand=True)
@@ -265,7 +332,10 @@ class MidiWinGui:
         self.mapping_state.trace_add("write", lambda *_: self._fill_mappings())
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=6)
-        ttk.Button(row, text="Inspect / try event", command=self.inspect_mapping).pack(side="left", padx=(0, 6))
+        self.inspect_button = ttk.Button(row, text="Inspect / try event", command=self.inspect_mapping)
+        self.inspect_button.pack(side="left", padx=(0, 6))
+        self.tree.bind("<<TreeviewSelect>>", lambda _event: self.update_mapping_action())
+        self.update_mapping_action()
         ttk.Button(row, text="Reload", command=self.reload).pack(side="left")
         ttk.Button(row, text="Show layout in console", command=lambda: self.run_once(["--show-layout"])).pack(side="left", padx=6)
 
@@ -280,23 +350,44 @@ class MidiWinGui:
         for key in selected:
             if self.tree.exists(key):
                 self.tree.selection_add(key)
+        if hasattr(self, "mapping_hint"):
+            filtered = bool(self.mapping_query.get().strip()) or self.mapping_state.get() != "All"
+            self.mapping_hint.set("No matches. Clear filters to see all mappings." if not rows and filtered else
+                                  "This profile has no mappings. Open the configuration to add controls." if not rows else
+                                  "Select a mapping to rehearse it. No device or desktop action is needed.")
+        self.update_mapping_action()
 
     def _refresh_readiness(self) -> None:
         if not hasattr(self, "readiness"):
             return
         enabled = sum(bool(m.get("enabled", True)) for m in self.config.get("mappings", []) if isinstance(m, dict))
-        self.readiness.set(f"Loaded profile: {self.config_path} · {enabled} enabled mappings · {self.detection}")
+        self.readiness.set(f"{self.config_path.name} · {enabled} enabled mappings · {self.detection}")
+        self.refresh_next_action()
 
     def _build_monitor(self, parent: ttk.Frame) -> None:
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=(0, 6))
-        ttk.Button(row, text="Detect devices", command=lambda: self.run_once(["--list-devices"])).pack(side="left")
-        ttk.Button(row, text="Read-only monitor", command=lambda: self.start_process(["--monitor"])).pack(side="left", padx=6)
-        ttk.Button(row, text="Dry-run mappings", command=lambda: self.start_process(["--dry-run"])).pack(side="left")
-        ttk.Button(row, text="Start active runtime", command=lambda: self.start_process([])).pack(side="left", padx=6)
-        ttk.Button(row, text="Stop", command=self.stop_process).pack(side="left")
-        self.log = tk.Text(parent, wrap="none", font=("Consolas", 9), state="disabled")
-        self.log.pack(fill="both", expand=True)
+        self.session_status = tk.StringVar(value="Console idle · background runtime not checked")
+        ttk.Label(parent, textvariable=self.session_status, wraplength=800, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 8))
+        inspect = ttk.LabelFrame(parent, text="Inspect input · mapped actions off", padding=8)
+        inspect.pack(fill="x", pady=(0, 8))
+        ttk.Button(inspect, text="Check profile", command=lambda: self.run_once(["--validate-config"])).pack(side="left", padx=(0, 6))
+        self.detect_button = ttk.Button(inspect, text="Detect devices", command=lambda: self.run_once(["--list-devices"]))
+        self.detect_button.pack(side="left", padx=(0, 6))
+        self.monitor_button = ttk.Button(inspect, text="Read-only monitor", command=lambda: self.start_process(["--monitor"]))
+        self.monitor_button.pack(side="left", padx=(0, 6))
+        ttk.Button(inspect, text="Dry-run mappings", command=lambda: self.start_process(["--dry-run"])).pack(side="left")
+        active = ttk.LabelFrame(parent, text="Apply mappings · controls your desktop", padding=8)
+        active.pack(fill="x", pady=(0, 8))
+        ttk.Button(active, text="Start active runtime", command=lambda: self.start_process([])).pack(side="left", padx=(0, 6))
+        self.stop_button = ttk.Button(active, text="Stop console process", command=self.stop_process)
+        self.stop_button.pack(side="left")
+        ttk.Label(parent, text="Monitor and dry-run pause an existing background runtime. Stop or close restores it.", wraplength=800).pack(anchor="w", pady=(0, 8))
+        log_frame = ttk.Frame(parent)
+        log_frame.pack(fill="both", expand=True)
+        self.log = tk.Text(log_frame, wrap="word", font=("Consolas", 9), state="disabled", height=8)
+        self.log.pack(side="left", fill="both", expand=True)
+        scroll = ttk.Scrollbar(log_frame, command=self.log.yview)
+        scroll.pack(side="right", fill="y")
+        self.log.configure(yscrollcommand=scroll.set)
 
     def python_command(self) -> list[str]:
         command = [sys.executable, "-m", "midiwin"]
@@ -305,6 +396,7 @@ class MidiWinGui:
         return command
 
     def start_process(self, arguments: list[str]) -> None:
+        self.show_tab("monitor")
         restore_previous = self.resume_runtime
         self.stop_process(resume=False)
         self.resume_runtime = restore_previous
@@ -323,17 +415,27 @@ class MidiWinGui:
         except (OSError, subprocess.SubprocessError) as error:
             self.status.set("Could not start; use Stop to restore runtime" if self.resume_runtime else "Could not start; see Monitoring")
             self._append(f"Could not start: {error}\n")
+            self.set_session_status("Console process could not start" + (" · Stop restores background runtime" if self.resume_runtime else " · see log"))
             return
         self.process = process
+        mode = "Read-only input" if "--monitor" in arguments else "Dry-run mappings" if "--dry-run" in arguments else "Active mappings"
+        self.set_session_status(mode + " running · " + ("mapped actions off" if arguments else "controls your desktop") + (" · background resumes on Stop" if self.resume_runtime else ""))
         threading.Thread(target=self._read_process, args=(process,), daemon=True).start()
         self.status.set("Running " + (" ".join(arguments) or "active runtime"))
 
     def run_once(self, arguments: list[str]) -> None:
+        if "--set-brightness" not in arguments:
+            self.show_tab("monitor")
         command = self.python_command() + arguments
         self.command_serial += 1
         token = self.command_serial
         if "--list-devices" in arguments:
             self.detection_serial = token
+            self.detection = "Checking devices…"
+        if "--validate-config" in arguments:
+            self.validation_serial = token
+            self.profile_check = "checking"
+        self._refresh_readiness()
         self.status.set("Checking…")
         def worker() -> None:
             code, output = execute_command(command)
@@ -357,16 +459,20 @@ class MidiWinGui:
             self._append(text)
             self._append(f"[exit {code if code is not None else 'unavailable'}]\n")
             if "--list-devices" in arguments and token == self.detection_serial:
-                self.detection = "Devices detected" if code == 0 else "Device check failed; see Monitoring"
+                self.detection = "Device check complete" if code == 0 else "Device check failed; see Monitor & runtime"
                 self._refresh_readiness()
+            if "--validate-config" in arguments and token == getattr(self, "validation_serial", 0):
+                self.profile_check = "valid" if code == 0 else "failed"
+                self.refresh_next_action()
             if token == self.command_serial:
-                self.status.set("Check completed" if code == 0 else "Check failed; see Monitoring")
+                self.status.set("Check completed" if code == 0 else "Check failed; see Monitor & runtime")
             return
         _, process, value = item
         if process is not self.process:
             return
         if item[0] == "stopped":
             self.process = None
+            self.set_session_status(f"Console process ended (exit {value})" + (" · Stop restores background runtime" if getattr(self, "resume_runtime", False) else " · mapped actions off"))
             self.status.set(f"Process stopped (exit {value})")
             self._append(f"[process stopped: exit {value}]\n")
             return
@@ -408,7 +514,9 @@ class MidiWinGui:
             except OSError as error:
                 self._append(f"Could not restore runtime: {error}\n")
                 self.status.set("Could not restore runtime; retry Stop")
+                self.set_session_status("Background restore failed · retry Stop")
                 return
+        self.set_session_status("Previous background runtime launched" if resume and self.resume_runtime else "Console process stopped · background runtime status not checked")
         self.resume_runtime = False
         self.status.set("Stopped")
 
@@ -461,6 +569,8 @@ class MidiWinGui:
             messagebox.showerror("Invalid configuration", str(error))
             return False
         self.config = candidate
+        self.profile_check = "unchecked"
+        self.validation_serial = 0
         selected_display = display.get("display", "")
         self.brightness_display.set("" if selected_display is None else str(selected_display))
         self.min_brightness.set(minimum)
