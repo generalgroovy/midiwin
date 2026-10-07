@@ -40,6 +40,8 @@ Select a row and choose **Inspect / try event** (or press Enter). The inspector 
 
 The inspector uses a snapshot of the loaded profile. Reopen it after reloading to inspect new configuration. It never opens controllers or runs mapped commands; it does not simulate action values, throttling, timing or hardware response. Windows tracks qualified `shift` / `hotcue` modifiers only; releases clear those modifiers before routing.
 
+**Monitor & runtime → Inspect last input** opens that same offline inspector for the last control received by this console process. The summary shows its device, control, event and value; the inspector selects the corresponding mapping and lists all routing candidates, including disabled mappings and layer requirements. Unmapped controls are explained too. Held modifiers are not captured: enter them in the rehearsal before interpreting eligibility. This does not replay the event or apply desktop actions. Stopped input stays labeled Last received; starting another console process clears it until fresh input arrives.
+
 One-off diagnostics report their exit code, time out after 20 seconds, and put details in Monitor & runtime. Monitor startup service checks time out after 5 seconds. The log retains the latest 2,000 lines; restarting monitoring discards late output from the old child.
 
 ## First session

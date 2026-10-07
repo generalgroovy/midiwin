@@ -257,6 +257,39 @@ class MidiWinGui:
         else:
             self.start_process(["--monitor"])
 
+    def build_input_link(self, parent: ttk.Frame) -> None:
+        self.last_input = None
+        self.last_input_text = tk.StringVar(value="No input received in this console session.")
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=(0, 8))
+        self.input_inspect_button = ttk.Button(row, text="Inspect last input", state="disabled", command=self.inspect_last_input)
+        self.input_inspect_button.pack(side="right", padx=(8, 0))
+        ttk.Label(row, textvariable=self.last_input_text, wraplength=580).pack(side="left", fill="x", expand=True)
+
+    def clear_last_input(self) -> None:
+        self.last_input = None
+        if hasattr(self, "last_input_text"):
+            self.last_input_text.set("Waiting for input from this console process.")
+            self.input_inspect_button.configure(state="disabled")
+
+    def receive_input(self, match: re.Match) -> None:
+        device, control, kind, value = match.groups()
+        if kind not in {"press", "release", "relative", "absolute"}:
+            return
+        self.last_input = (device, control, kind)
+        if hasattr(self, "last_input_text"):
+            self.last_input_text.set(f"Last received: {device}.{control} · {kind} · value {value}")
+            self.input_inspect_button.configure(state="normal")
+
+    def inspect_last_input(self) -> None:
+        event = getattr(self, "last_input", None)
+        if event is None:
+            return
+        previous = getattr(self, "inspector", None)
+        if previous is not None and previous.winfo_exists():
+            previous.destroy()
+        self.inspector = MappingInspector(self.root, self.config, event=event)
+
     def set_session_status(self, text: str) -> None:
         if hasattr(self, "session_status"):
             self.session_status.set(text)
@@ -381,6 +414,7 @@ class MidiWinGui:
         self.stop_button = ttk.Button(active, text="Stop console process", command=self.stop_process)
         self.stop_button.pack(side="left")
         ttk.Label(parent, text="Monitor and dry-run pause an existing background runtime. Stop or close restores it.", wraplength=800).pack(anchor="w", pady=(0, 8))
+        self.build_input_link(parent)
         log_frame = ttk.Frame(parent)
         log_frame.pack(fill="both", expand=True)
         self.log = tk.Text(log_frame, wrap="word", font=("Consolas", 9), state="disabled", height=8)
@@ -397,6 +431,7 @@ class MidiWinGui:
 
     def start_process(self, arguments: list[str]) -> None:
         self.show_tab("monitor")
+        self.clear_last_input()
         restore_previous = self.resume_runtime
         self.stop_process(resume=False)
         self.resume_runtime = restore_previous
@@ -479,6 +514,7 @@ class MidiWinGui:
         self._append(value)
         match = EVENT_RE.search(value)
         if match:
+            self.receive_input(match)
             self.canvas.flash(match.group(1), match.group(2))
 
     def _drain_output(self) -> None:
