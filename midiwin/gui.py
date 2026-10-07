@@ -155,7 +155,7 @@ class MidiWinGui:
     def __init__(self, root: tk.Tk, config_path: Path | None = None):
         self.root = root
         self.root.title("MIDIWIN Controller Console")
-        self.root.geometry("1180x760")
+        self.root.geometry(f"{min(1180, self.root.winfo_screenwidth() - 48)}x{min(760, self.root.winfo_screenheight() - 100)}")
         self.requested_config_path = config_path.resolve() if config_path is not None else None
         self.config_path = self.requested_config_path or APP_DIR / "config.json"
         self.config = load_config(self.requested_config_path)
@@ -413,7 +413,7 @@ class MidiWinGui:
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                        text=True, bufsize=1)
         except (OSError, subprocess.SubprocessError) as error:
-            self.status.set("Could not start; use Stop to restore runtime" if self.resume_runtime else "Could not start; see Monitoring")
+            self.status.set("Could not start; use Stop to restore runtime" if self.resume_runtime else "Could not start; see Monitor & runtime")
             self._append(f"Could not start: {error}\n")
             self.set_session_status("Console process could not start" + (" · Stop restores background runtime" if self.resume_runtime else " · see log"))
             return
