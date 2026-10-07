@@ -1,0 +1,7 @@
+{
+  "repository": "midiwin",
+  "runtime_sha": "eb665f01a8eadaacec1e18b4ce363f740ea7006d",
+  "ci_url": "https://github.com/generalgroovy/midiwin/actions/runs/37601705537",
+  "behavior_tests": 57,
+  "source": "GitHub Actions native Tk artifact; synthetic profiles; no subprocess/hardware activation"
+}

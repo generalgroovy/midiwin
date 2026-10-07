@@ -14,7 +14,10 @@ The controller diagram now has horizontal and vertical scrollbars at smaller des
 
 - Local: **57 behavior tests passed**, Python compilation and `git diff --check` passed.
 - Existing real-Tk CI workflow extended with next-action transitions, synthetic empty device results, visible controls at 860×620, filter recovery, mapping-link focus and scrollable diagram, retaining inspector and save/discard/cancel checks.
-- Initial native CI workflows passed on Linux and Windows, but screenshot inspection caught the Windows runner’s smaller desktop clipping a requested large window. Startup and screenshot dimensions now respect screen space; fresh CI and independent review pending.
+- Final runtime `eb665f01a8eadaacec1e18b4ce363f740ea7006d`: [native CI 37601705537](https://github.com/generalgroovy/midiwin/actions/runs/37601705537) passed **57 tests**, configuration validation and the real Tk workflow. The Windows executable build also passed; the resulting installer/application was not manually run.
+- Accepted screenshots and workflow receipt: [docs/evidence/ux-2026-10-07/eb665f0](docs/evidence/ux-2026-10-07/eb665f0). Linux uses 1180×760 and Windows fits its 1024×768 desktop with a 976×668 client window; both check 860×620. All controls/logs are contained, with zero Tk callback errors.
+- Screenshot self-review caught an initially clipped Windows window. Startup now respects screen space. The first screen-sizing follow-up failed mocked-constructor tests; keeping native geometry in UI construction fixed that fixture boundary. Fresh full checks passed.
+- Separate reviewer `ux_ko` checked both implementations. It found MIDILIN could replace newer monitor state with a delayed service-command completion. The fix associates service feedback with its command and session generation; positive and negative regression tests pass. The reviewer confirmed the P2 resolution. Root performs final rendered/integration acceptance. No new behavior is introduced by the subsequent evidence/documentation commit.
 - No physical controller, driver, desktop action, service activation or human usability acceptance was performed. Tests use synthetic profile data and prohibit subprocess operations.
 
 ## Preserved boundaries
