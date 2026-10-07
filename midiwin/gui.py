@@ -155,7 +155,6 @@ class MidiWinGui:
     def __init__(self, root: tk.Tk, config_path: Path | None = None):
         self.root = root
         self.root.title("MIDIWIN Controller Console")
-        self.root.geometry(f"{min(1180, self.root.winfo_screenwidth() - 48)}x{min(760, self.root.winfo_screenheight() - 100)}")
         self.requested_config_path = config_path.resolve() if config_path is not None else None
         self.config_path = self.requested_config_path or APP_DIR / "config.json"
         self.config = load_config(self.requested_config_path)
@@ -176,6 +175,7 @@ class MidiWinGui:
         self.status = tk.StringVar(value="Ready")
         ttk.Label(toolbar, textvariable=self.status).pack(side="right")
         self.root.minsize(860, 620)
+        self.root.geometry(f"{min(1180, self.root.winfo_screenwidth() - 48)}x{min(760, self.root.winfo_screenheight() - 100)}")
         self.profile_check = "unchecked"
         self.validation_serial = 0
         setup = ttk.Frame(self.root, padding=(8, 0, 8, 8))

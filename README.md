@@ -46,7 +46,7 @@ One-off diagnostics report their exit code, time out after 20 seconds, and put d
 
 1. Open **Mappings** to inspect which controls perform which actions.
 2. In **Monitor & runtime**, use **Detect devices**, then **Read-only monitor** or **Dry-run mappings** to inspect input and planned actions.
-3. Use **Start active runtime** when ready to apply mappings. **Stop** ends the console-owned process. The runtime PID lock prevents two controller runtimes from running concurrently.
+3. Use **Start active runtime** when ready to apply mappings. **Stop console process** ends the console-owned process. The runtime PID lock prevents two controller runtimes from running concurrently.
 4. In **Display settings**, select the display and minimum brightness, then **Save configuration**. The brightness slider is a live test, not a preview.
 
 Starting a monitor temporarily stops an existing background runtime. Stopping the monitor, or closing the console, resumes that runtime if it was previously active. Use `--stop-runtime` below when you intend to leave all control stopped.
