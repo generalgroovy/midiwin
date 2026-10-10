@@ -189,8 +189,6 @@ class MidiWinGui:
         steps.pack(anchor="w", pady=(5, 0))
         self.next_button = ttk.Button(steps, command=self.take_next_step)
         self.next_button.pack(side="left", padx=(0, 6))
-        ttk.Button(steps, text="Explore mappings", command=lambda: self.show_tab("mappings")).pack(side="left", padx=(0, 6))
-        ttk.Button(steps, text="Monitor & runtime", command=lambda: self.show_tab("monitor")).pack(side="left")
         self.book = ttk.Notebook(self.root)
         self.book.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         self.tabs = {name: ttk.Frame(self.book, padding=8) for name in ("mappings", "layout", "settings", "monitor")}
@@ -235,17 +233,17 @@ class MidiWinGui:
             return
         check = getattr(self, "profile_check", "unchecked")
         if check == "checking":
-            label, hint, state = "Checking profile…", "Checking the saved file. Your unsaved display draft stays here.", "disabled"
+            label, hint, state = "Checking profile…", "Unsaved display settings are not checked or changed.", "disabled"
         elif check != "valid":
-            label, hint, state = "Check saved profile", "Start here: check the saved profile, or explore mappings without a device.", "normal"
+            label, hint, state = "Check saved profile", "Mappings can be inspected without a controller.", "normal"
             if check == "failed":
-                hint = "Profile needs attention. See Monitor & runtime for details, fix the file, then check again."
+                hint = "Fix the errors in Monitor & runtime, then check again."
         elif self.detection == "Checking devices…":
-            label, hint, state = "Detecting devices…", "Looking for controllers. Results appear in Monitor & runtime.", "disabled"
+            label, hint, state = "Detecting devices…", "Results appear in Monitor & runtime.", "disabled"
         elif self.detection != "Device check complete":
-            label, hint, state = "Detect devices", "Profile checked. Connect a controller, then detect devices.", "normal"
+            label, hint, state = "Detect devices", "Connect a controller before detecting devices.", "normal"
         else:
-            label, hint, state = "Monitor input", "Review the device list, then monitor input to see incoming controls.", "normal"
+            label, hint, state = "Monitor input", "Review the detected devices, then monitor incoming controls.", "normal"
         self.next_button.configure(text=label, state=state)
         self.next_hint.set(hint)
 
@@ -400,7 +398,7 @@ class MidiWinGui:
     def _build_monitor(self, parent: ttk.Frame) -> None:
         self.session_status = tk.StringVar(value="Console idle · background runtime not checked")
         ttk.Label(parent, textvariable=self.session_status, wraplength=800, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 8))
-        inspect = ttk.LabelFrame(parent, text="Inspect input · mapped actions off", padding=8)
+        inspect = ttk.LabelFrame(parent, text="Input inspection · actions off", padding=8)
         inspect.pack(fill="x", pady=(0, 8))
         ttk.Button(inspect, text="Check profile", command=lambda: self.run_once(["--validate-config"])).pack(side="left", padx=(0, 6))
         self.detect_button = ttk.Button(inspect, text="Detect devices", command=lambda: self.run_once(["--list-devices"]))
@@ -408,7 +406,7 @@ class MidiWinGui:
         self.monitor_button = ttk.Button(inspect, text="Read-only monitor", command=lambda: self.start_process(["--monitor"]))
         self.monitor_button.pack(side="left", padx=(0, 6))
         ttk.Button(inspect, text="Dry-run mappings", command=lambda: self.start_process(["--dry-run"])).pack(side="left")
-        active = ttk.LabelFrame(parent, text="Apply mappings · controls your desktop", padding=8)
+        active = ttk.LabelFrame(parent, text="Active control · applies desktop actions", padding=8)
         active.pack(fill="x", pady=(0, 8))
         ttk.Button(active, text="Start active runtime", command=lambda: self.start_process([])).pack(side="left", padx=(0, 6))
         self.stop_button = ttk.Button(active, text="Stop console process", command=self.stop_process)

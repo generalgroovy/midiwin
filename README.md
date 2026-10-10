@@ -2,12 +2,6 @@
 
 Use Native Instruments Traktor Kontrol F1 and X1 MK1 controls for Windows media, volume, brightness and focused-window actions. The Tk console shows mappings and input activity. [MIDILIN](https://github.com/generalgroovy/midilin) is the Linux/Sway companion.
 
-## Engineering overview
-
-- **Input mapping:** configurable controller actions and modifier layers connect Traktor hardware to Windows desktop functions.
-- **Windows integration:** device access, media and window actions, and display backends are coordinated through the Python runtime.
-- **Operational visibility:** the Tk console provides mapping inspection, configuration validation and read-only monitoring; process ownership and a PID lock coordinate active control.
-
 [Project overview](https://generalgroovy.web.app/apps/midilin-midiwin/) · [Python implementation](midiwin/) · [Tests](tests/)
 
 ## Install and open
@@ -30,7 +24,7 @@ The F1 uses its HID driver. X1 raw USB access requires WinUSB; the separate `set
 
 ## Check and find controls
 
-The console opens on **Mappings**, ready to explore without hardware. The setup strip shows the profile name, enabled mapping count and last device check. Its next-action button guides **Check saved profile → Detect devices → Monitor input**, with failures kept retryable. The full profile path is in **Display settings**.
+The console opens on **Mappings**, ready to explore without hardware. The setup strip shows the profile name, enabled mapping count and last device check. Use the tabs to switch tools; the strip contains only the next setup action. Its next-action button guides **Check saved profile → Detect devices → Monitor input**, with failures kept retryable. The full profile path is in **Display settings**.
 
 Search by device, control, action, layer or state; filter Enabled/Disabled. **Clear filters** resets both the search and state filter and returns focus to search. No matches explains how to recover. Search does not edit the profile.
 
